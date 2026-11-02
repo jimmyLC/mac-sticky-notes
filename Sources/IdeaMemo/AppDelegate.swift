@@ -24,6 +24,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         NSApp.mainMenu = makeMainMenu()
         applyDockPolicy()
+        settings.appearance.apply()
         setUpStatusItem()
         manager.start()
         registerHotkey()
@@ -58,7 +59,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Right-click menu on the Dock icon.
     func applicationDockMenu(_ sender: NSApplication) -> NSMenu? {
         let menu = NSMenu()
-        menu.addItem(withTitle: L("New Note"), action: #selector(newNote), keyEquivalent: "").target = self
+        menu.addItem(withTitle: L("New Memo"), action: #selector(newNote), keyEquivalent: "").target = self
         menu.addItem(withTitle: L("Manage Notes…"), action: #selector(openManager), keyEquivalent: "").target = self
         menu.addItem(withTitle: L("Settings…"), action: #selector(openSettings), keyEquivalent: "").target = self
         return menu
@@ -133,7 +134,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             button.image?.isTemplate = true
         }
         let menu = NSMenu()
-        menu.addItem(withTitle: L("New Note"), action: #selector(newNote), keyEquivalent: "").target = self
+        menu.addItem(withTitle: L("New Memo"), action: #selector(newNote), keyEquivalent: "").target = self
         menu.addItem(withTitle: L("Show All Notes"), action: #selector(showAllNotes), keyEquivalent: "").target = self
         menu.addItem(withTitle: L("Manage Notes…"), action: #selector(openManager), keyEquivalent: "").target = self
         menu.addItem(.separator())
@@ -225,8 +226,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             item(L("Quit Idea Memo"), #selector(NSApplication.terminate(_:)), "q"),
         ])
         add(L("File"), to: main, [
-            item(L("New Note"), #selector(newNote), "n", target: self),
-            item(L("Close Note"), #selector(closeCurrentNote), "w", target: self),
+            item(L("New Memo"), #selector(newNote), "n", target: self),
+            item(L("Close Memo"), #selector(closeCurrentNote), "w", target: self),
         ])
         add(L("Edit"), to: main, [
             item(L("Undo"), Selector(("undo:")), "z"),
@@ -240,6 +241,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         add(L("Format"), to: main, [
             item(L("Bold"), #selector(RichNoteTextView.toggleBold(_:)), "b"),
             item(L("Italic"), #selector(RichNoteTextView.toggleItalic(_:)), "i"),
+            .separator(),
+            item(L("Bulleted List"), #selector(RichNoteTextView.toggleBulletList(_:)), "8", modifiers: [.command, .shift]),
+            item(L("Numbered List"), #selector(RichNoteTextView.toggleNumberedList(_:)), "7", modifiers: [.command, .shift]),
+            item(L("Checklist"), #selector(RichNoteTextView.toggleChecklist(_:)), "l", modifiers: [.command, .shift]),
         ])
         add(L("View"), to: main, [
             item(L("Larger Text"), #selector(increaseTextSize), "+", target: self),

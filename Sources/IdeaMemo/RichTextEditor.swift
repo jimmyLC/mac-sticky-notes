@@ -31,17 +31,22 @@ final class RichNoteTextView: NSTextView {
         let lineRange = ns.lineRange(for: NSRange(location: caret, length: 0))
         let line = ns.substring(with: lineRange).trimmingCharacters(in: .newlines)
 
-        guard let kind = ListMarker.kind(ofLine: line) else {
+        guard let parsed = ListMarker.parse(line) else {
             super.insertNewline(sender)
             return
         }
-        if (line as NSString).length <= ListMarker.length {
+        if (line as NSString).length <= parsed.length {
             // Return on an empty item ends the list.
             insertText("", replacementRange: NSRange(location: lineRange.location, length: (line as NSString).length))
             return
         }
         super.insertNewline(sender)
-        let next: BlockKind = { if case .checkbox = kind { return .checkbox(checked: false) } else { return .bullet } }()
+        let next: BlockKind
+        switch parsed.kind {
+        case .numbered(let number): next = .numbered(number + 1)
+        case .checkbox: next = .checkbox(checked: false)
+        default: next = .bullet
+        }
         insertText(ListMarker.text(for: next), replacementRange: selectedRange())
     }
 
@@ -49,14 +54,99 @@ final class RichNoteTextView: NSTextView {
         let selection = selectedRange()
         if selection.length == 0 {
             let ns = string as NSString
-            let lineStart = ns.lineRange(for: NSRange(location: selection.location, length: 0)).location
-            if selection.location == lineStart + ListMarker.length,
-               ListMarker.kind(ofLine: ns.substring(with: NSRange(location: lineStart, length: ListMarker.length))) != nil {
-                insertText("", replacementRange: NSRange(location: lineStart, length: ListMarker.length))
+            let lineRange = ns.lineRange(for: NSRange(location: selection.location, length: 0))
+            let line = ns.substring(with: lineRange).trimmingCharacters(in: .newlines)
+            if let parsed = ListMarker.parse(line), selection.location == lineRange.location + parsed.length {
+                insertText("", replacementRange: NSRange(location: lineRange.location, length: parsed.length))
                 return
             }
         }
         super.deleteBackward(sender)
+    }
+
+    // MARK: List commands
+
+    enum ListChoice { case bullet, numbered, checklist }
+
+    @objc func toggleBulletList(_ sender: Any?) { applyList(.bullet) }
+    @objc func toggleNumberedList(_ sender: Any?) { applyList(.numbered) }
+    @objc func toggleChecklist(_ sender: Any?) { applyList(.checklist) }
+
+    /// Turns the selected lines into a list of the chosen kind, or back into plain lines when
+    /// they all already are that kind.
+    func applyList(_ choice: ListChoice) {
+        guard let storage = textStorage else { return }
+        let ns = string as NSString
+        let selection = selectedRange()
+        let region = ns.lineRange(for: selection)
+
+        struct Line { var range: NSRange; var text: String; var marker: (kind: BlockKind, length: Int)? }
+        var lines: [Line] = []
+        var location = region.location
+        repeat {
+            let range = ns.lineRange(for: NSRange(location: location, length: 0))
+            let text = ns.substring(with: range).trimmingCharacters(in: .newlines)
+            lines.append(Line(range: range, text: text, marker: ListMarker.parse(text)))
+            location = NSMaxRange(range)
+        } while location < NSMaxRange(region)
+
+        func matches(_ kind: BlockKind?) -> Bool {
+            switch (choice, kind) {
+            case (.bullet, .bullet?), (.numbered, .numbered?), (.checklist, .checkbox?): return true
+            default: return false
+            }
+        }
+        let targets = lines.filter { !$0.text.isEmpty || lines.count == 1 }
+        let removing = !targets.isEmpty && targets.allSatisfy { matches($0.marker?.kind) }
+
+        // Numbering continues from a numbered line directly above the selection.
+        var number = 1
+        if region.location > 0 {
+            let above = ns.lineRange(for: NSRange(location: region.location - 1, length: 0))
+            if case .numbered(let previous)? = ListMarker.parse(ns.substring(with: above).trimmingCharacters(in: .newlines))?.kind {
+                number = previous + 1
+            }
+        }
+
+        var edits: [(range: NSRange, replacement: String)] = []
+        for line in targets {
+            let markerRange = NSRange(location: line.range.location, length: line.marker?.length ?? 0)
+            var marker = ""
+            if !removing {
+                switch choice {
+                case .bullet: marker = ListMarker.text(for: .bullet)
+                case .checklist: marker = ListMarker.text(for: .checkbox(checked: false))
+                case .numbered: marker = ListMarker.text(for: .numbered(number)); number += 1
+                }
+            }
+            edits.append((markerRange, marker))
+        }
+        guard !edits.isEmpty, shouldChangeText(in: region, replacementString: nil) else { return }
+
+        let attributes: [NSAttributedString.Key: Any] = [
+            .font: RichTextBridge.font(size: style.fontSize, bold: false, italic: false),
+            .foregroundColor: style.textColor,
+        ]
+        storage.beginEditing()
+        for edit in edits.reversed() {
+            storage.replaceCharacters(in: edit.range, with: NSAttributedString(string: edit.replacement, attributes: attributes))
+        }
+        storage.endEditing()
+
+        var shift = 0
+        var total = 0
+        for edit in edits {
+            let delta = (edit.replacement as NSString).length - edit.range.length
+            total += delta
+            if NSMaxRange(edit.range) <= selection.location { shift += delta }
+        }
+        if selection.length == 0 {
+            setSelectedRange(NSRange(location: max(selection.location + shift, 0), length: 0))
+        } else {
+            setSelectedRange(NSRange(location: selection.location + (edits.first.map { $0.range.location < selection.location ? shift : 0 } ?? 0),
+                                     length: max(selection.length + total - shift, 0)))
+        }
+        didChangeText()
     }
 
     // MARK: Checkboxes
@@ -172,6 +262,10 @@ struct RichTextEditor: NSViewRepresentable {
         textView.isAutomaticTextReplacementEnabled = false
         textView.isAutomaticSpellingCorrectionEnabled = false
         textView.textContainerInset = NSSize(width: 6, height: 6)
+        if #available(macOS 15.0, *) {
+            // No floating Writing Tools button next to a memo.
+            textView.writingToolsBehavior = .none
+        }
         textView.delegate = context.coordinator
 
         let style = context.coordinator.style
@@ -225,6 +319,10 @@ struct RichTextEditor: NSViewRepresentable {
             guard let textView = notification.object as? NSTextView, let storage = textView.textStorage else { return }
             // Restyling while an input method is composing would cancel the composition.
             if !textView.hasMarkedText() {
+                let selection = textView.selectedRange()
+                if let caret = RichTextBridge.renumber(storage, caret: selection.location), selection.length == 0 {
+                    textView.setSelectedRange(NSRange(location: caret, length: 0))
+                }
                 RichTextBridge.restyle(storage, style: style)
                 var typing = textView.typingAttributes
                 typing[.foregroundColor] = style.textColor

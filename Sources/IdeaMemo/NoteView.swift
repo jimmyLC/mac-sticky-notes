@@ -2,12 +2,14 @@ import AppKit
 import StickyCore
 import SwiftUI
 
-/// One sticky note: flat pastel sheet, thin title strip, and a toolbar that appears on hover.
+/// One memo: flat pastel sheet, thin title strip, and a toolbar that appears on hover.
+/// Double-click the title strip to roll it up to just the title.
 struct NoteView: View {
     @ObservedObject var manager: NoteManager
     @ObservedObject var settings: AppSettings
     let noteID: UUID
 
+    @Environment(\.colorScheme) private var colorScheme
     @State private var hovering = false
     @State private var showColors = false
 
@@ -20,42 +22,46 @@ struct NoteView: View {
     }
 
     private func sheet(for note: Note) -> some View {
-        let ink: Color = note.color.prefersLightText ? .white : .black
+        let shown = note.color.displayColor(dark: colorScheme == .dark)
+        let ink: Color = shown.prefersLightText ? .white : .black
 
         return ZStack(alignment: .topLeading) {
-            note.color.swiftUIColor
+            shown.swiftUIColor.opacity(note.opacity)
 
             VStack(spacing: 0) {
                 HStack(spacing: 6) {
                     Image(systemName: "line.3.horizontal")
                         .font(.caption2.weight(.semibold))
                         .foregroundStyle(ink.opacity(0.4))
-                    Text(note.title.isEmpty ? L("Note") : note.title)
+                    Text(note.title.isEmpty ? L("Idea") : note.title)
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(ink)
                         .lineLimit(1)
                     Spacer(minLength: 0)
                 }
                 .padding(.horizontal, 12)
-                .frame(height: 30)
-                .background(WindowDragHandle())
+                .frame(height: NoteManager.shadedHeight)
+                .overlay(WindowDragHandle(onDoubleClick: { manager.toggleShade(noteID) }))
+                .help(L("Double-click to roll up"))
 
-                Divider().overlay(ink.opacity(0.15)).padding(.horizontal, 8)
+                if !note.isShaded {
+                    Divider().overlay(ink.opacity(0.15)).padding(.horizontal, 8)
 
-                RichTextEditor(
-                    initialMarkdown: note.markdown,
-                    fontSize: settings.textSize.points,
-                    textColor: note.color.prefersLightText ? .white : .black,
-                    onChange: { manager.setMarkdown(noteID, $0) }
-                )
-                .padding(.bottom, 4)
+                    RichTextEditor(
+                        initialMarkdown: note.markdown,
+                        fontSize: settings.textSize.points,
+                        textColor: shown.prefersLightText ? .white : .black,
+                        onChange: { manager.setMarkdown(noteID, $0) }
+                    )
+                    .padding(.bottom, 4)
+                }
             }
         }
         .overlay(alignment: .topTrailing) {
             if hovering || showColors {
                 VStack(alignment: .trailing, spacing: 6) {
                     toolbar(for: note)
-                    if showColors { colorPicker(for: note) }
+                    if showColors && !note.isShaded { colorPicker(for: note) }
                 }
                 .padding(.top, 3)
                 .padding(.trailing, 6)
@@ -69,7 +75,7 @@ struct NoteView: View {
 
     private func toolbar(for note: Note) -> some View {
         HStack(spacing: 8) {
-            toolbarButton("plus", help: L("New Note")) { manager.createNote() }
+            toolbarButton("plus", help: L("New Memo")) { manager.createNote() }
 
             Button { showColors.toggle() } label: {
                 Circle()
@@ -80,11 +86,29 @@ struct NoteView: View {
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .help(L("Change Color"))
+            .help(L("Color and Transparency"))
 
             toolbarButton(note.alwaysOnTop ? "pin.fill" : "pin", help: L("Keep on Top")) { manager.togglePin(noteID) }
-            toolbarButton("trash", help: L("Delete Note")) { manager.moveToTrash(noteID) }
-            toolbarButton("xmark", help: L("Close Note")) { manager.collapse(noteID) }
+
+            if !note.isShaded {
+                Menu {
+                    Button(L("Bulleted List")) { manager.applyList(noteID, .bullet) }
+                    Button(L("Numbered List")) { manager.applyList(noteID, .numbered) }
+                    Button(L("Checklist")) { manager.applyList(noteID, .checklist) }
+                } label: {
+                    Image(systemName: "list.bullet")
+                        .font(.system(size: 11, weight: .semibold))
+                        .frame(width: 20, height: 20)
+                        .contentShape(Rectangle())
+                }
+                .menuStyle(.borderlessButton)
+                .menuIndicator(.hidden)
+                .fixedSize()
+                .help(L("Lists"))
+            }
+
+            toolbarButton("trash", help: L("Delete Memo")) { manager.moveToTrash(noteID) }
+            toolbarButton("xmark", help: L("Close Memo")) { manager.collapse(noteID) }
         }
         .padding(.horizontal, 8)
         .padding(.vertical, 2)
@@ -103,54 +127,68 @@ struct NoteView: View {
     }
 
     private func colorPicker(for note: Note) -> some View {
-        HStack(spacing: 10) {
-            ForEach(NoteColor.presets, id: \.self) { color in
-                Button {
-                    manager.setColor(noteID, color)
-                    showColors = false
-                } label: {
-                    Circle()
-                        .fill(color.swiftUIColor)
-                        .frame(width: 22, height: 22)
-                        .overlay(Circle().strokeBorder(.primary.opacity(0.3), lineWidth: 1))
-                        .overlay {
-                            if color == note.color {
-                                Circle().strokeBorder(.primary.opacity(0.8), lineWidth: 2).padding(-3)
+        VStack(spacing: 8) {
+            HStack(spacing: 10) {
+                ForEach(NoteColor.presets, id: \.self) { color in
+                    Button {
+                        manager.setColor(noteID, color)
+                    } label: {
+                        Circle()
+                            .fill(color.swiftUIColor)
+                            .frame(width: 22, height: 22)
+                            .overlay(Circle().strokeBorder(.primary.opacity(0.3), lineWidth: 1))
+                            .overlay {
+                                if color == note.color {
+                                    Circle().strokeBorder(.primary.opacity(0.8), lineWidth: 2).padding(-3)
+                                }
                             }
-                        }
+                    }
+                    .buttonStyle(.plain)
+                    .help(color.presetName ?? "")
+                }
+                Divider().frame(height: 18)
+                Button {
+                    showColors = false
+                    let id = noteID
+                    let manager = manager
+                    ColorPanelBridge.shared.present(initial: NSColor(note.color)) { picked in
+                        Task { @MainActor in manager.setColor(id, NoteColor(nsColor: picked)) }
+                    }
+                } label: {
+                    Image(systemName: "paintpalette")
+                        .font(.system(size: 14))
+                        .frame(width: 22, height: 22)
                 }
                 .buttonStyle(.plain)
-                .help(color.presetName ?? "")
+                .help(L("Custom Color…"))
             }
-            Divider().frame(height: 18)
-            Button {
-                showColors = false
-                let id = noteID
-                let manager = manager
-                ColorPanelBridge.shared.present(initial: NSColor(note.color)) { picked in
-                    Task { @MainActor in manager.setColor(id, NoteColor(nsColor: picked)) }
-                }
-            } label: {
-                Image(systemName: "paintpalette")
-                    .font(.system(size: 14))
-                    .frame(width: 22, height: 22)
+
+            HStack(spacing: 8) {
+                Image(systemName: "circle.dotted").font(.system(size: 11)).foregroundStyle(.secondary)
+                Slider(
+                    value: Binding(get: { note.opacity }, set: { manager.setOpacity(noteID, $0) }),
+                    in: 0.35...1
+                )
+                .controlSize(.small)
+                .frame(width: 130)
+                Image(systemName: "circle.fill").font(.system(size: 11)).foregroundStyle(.secondary)
             }
-            .buttonStyle(.plain)
-            .help(L("Custom Color…"))
+            .help(L("Transparency"))
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 7)
-        .background(.ultraThinMaterial, in: Capsule())
+        .padding(.horizontal, 14)
+        .padding(.vertical, 9)
+        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 16))
     }
 
     @ViewBuilder
     private func contextMenu(for note: Note) -> some View {
-        Button(L("New Note")) { manager.createNote() }
+        Button(L("New Memo")) { manager.createNote() }
         Divider()
+        Button(note.isShaded ? L("Unroll") : L("Roll Up")) { manager.toggleShade(noteID) }
         Toggle(L("Keep on Top"), isOn: Binding(get: { note.alwaysOnTop }, set: { _ in manager.togglePin(noteID) }))
         Toggle(L("Show on All Desktops"), isOn: Binding(get: { note.showOnAllSpaces }, set: { _ in manager.toggleAllSpaces(noteID) }))
         Divider()
-        Button(L("Close Note")) { manager.collapse(noteID) }
-        Button(L("Delete Note")) { manager.moveToTrash(noteID) }
+        Button(L("Close Memo")) { manager.collapse(noteID) }
+        Button(L("Delete Memo")) { manager.moveToTrash(noteID) }
     }
 }

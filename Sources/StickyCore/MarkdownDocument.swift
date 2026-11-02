@@ -15,6 +15,7 @@ public struct InlineRun: Equatable, Sendable {
 public enum BlockKind: Equatable, Sendable {
     case paragraph
     case bullet
+    case numbered(Int)
     case checkbox(checked: Bool)
 }
 
@@ -71,7 +72,20 @@ public struct MarkdownDocument: Equatable, Sendable {
         if line.hasPrefix("- ") {
             return MarkdownBlock(kind: .bullet, runs: parseInline(String(line.dropFirst(2))))
         }
+        if let (number, rest) = numberedPrefix(in: line) {
+            return MarkdownBlock(kind: .numbered(number), runs: parseInline(rest))
+        }
         return MarkdownBlock(kind: .paragraph, runs: parseInline(line))
+    }
+
+    /// `1. text` with one to three digits (longer numbers such as years are plain text).
+    static func numberedPrefix(in line: String) -> (number: Int, rest: String)? {
+        let digits = line.prefix { $0 >= "0" && $0 <= "9" }
+        guard (1...3).contains(digits.count), let number = Int(digits) else { return nil }
+        let after = line.dropFirst(digits.count)
+        if after == "." { return (number, "") }
+        if after.hasPrefix(". ") { return (number, String(after.dropFirst(2))) }
+        return nil
     }
 
     private enum Event {
@@ -92,7 +106,7 @@ public struct MarkdownDocument: Equatable, Sendable {
 
         while index < chars.count {
             let char = chars[index]
-            if char == "\\", index + 1 < chars.count, "\\*-".contains(chars[index + 1]) {
+            if char == "\\", index + 1 < chars.count, "\\*-.".contains(chars[index + 1]) {
                 buffer.append(chars[index + 1])
                 index += 2
                 continue
@@ -152,10 +166,16 @@ public struct MarkdownDocument: Equatable, Sendable {
         switch block.kind {
         case .paragraph:
             // A paragraph that would otherwise read back as a list item.
-            if inline.hasPrefix("- ") { inline = "\\" + inline }
+            if inline.hasPrefix("- ") {
+                inline = "\\" + inline
+            } else if numberedPrefix(in: inline) != nil, let dot = inline.firstIndex(of: ".") {
+                inline.insert("\\", at: dot)
+            }
             return inline
         case .bullet:
             return "- " + inline
+        case .numbered(let number):
+            return "\(number). " + inline
         case .checkbox(let checked):
             return (checked ? "- [x] " : "- [ ] ") + inline
         }

@@ -3,6 +3,8 @@ import SwiftUI
 
 /// A borderless sticky-note window. It behaves like a normal window unless the note is pinned on top.
 final class NotePanel: NSPanel {
+    static let normalMinSize = NSSize(width: 200, height: 160)
+
     let noteID: UUID
 
     init(noteID: UUID, frame: NSRect) {
@@ -19,7 +21,7 @@ final class NotePanel: NSPanel {
         hidesOnDeactivate = false
         isReleasedWhenClosed = false
         becomesKeyOnlyIfNeeded = false
-        minSize = NSSize(width: 200, height: 160)
+        minSize = Self.normalMinSize
         animationBehavior = .utilityWindow
     }
 
@@ -50,15 +52,30 @@ extension NSView {
     }
 }
 
-/// Lets a SwiftUI header move the window.
+/// Lets a SwiftUI header move the window; a double-click calls `onDoubleClick` instead.
 struct WindowDragHandle: NSViewRepresentable {
-    func makeNSView(context: Context) -> NSView { DragView() }
-    func updateNSView(_ nsView: NSView, context: Context) {}
+    var onDoubleClick: (() -> Void)?
+
+    func makeNSView(context: Context) -> NSView {
+        let view = DragView()
+        view.onDoubleClick = onDoubleClick
+        return view
+    }
+
+    func updateNSView(_ nsView: NSView, context: Context) {
+        (nsView as? DragView)?.onDoubleClick = onDoubleClick
+    }
 
     private final class DragView: NSView {
+        var onDoubleClick: (() -> Void)?
+
         override var mouseDownCanMoveWindow: Bool { false }
         override func mouseDown(with event: NSEvent) {
-            window?.performDrag(with: event)
+            if event.clickCount == 2 {
+                onDoubleClick?()
+            } else {
+                window?.performDrag(with: event)
+            }
         }
     }
 }

@@ -55,6 +55,28 @@ final class MarkdownDocumentTests: XCTestCase {
         XCTAssertEqual(doc.markdown(), "a  b")
     }
 
+    func testNumberedLists() {
+        let doc = MarkdownDocument(markdown: "1. one\n2. two\n10. ten")
+        XCTAssertEqual(doc.blocks.map(\.kind), [.numbered(1), .numbered(2), .numbered(10)])
+        XCTAssertEqual(doc.plainText, "one\ntwo\nten")
+        roundTrip("1. one\n2. **two**\n3. ")
+        // A bare "1." reads as an empty item and is written back with its trailing space.
+        XCTAssertEqual(MarkdownDocument(markdown: "1.").markdown(), "1. ")
+    }
+
+    func testYearsAndLongNumbersAreNotLists() {
+        XCTAssertEqual(MarkdownDocument(markdown: "2026. was a year").blocks[0].kind, .paragraph)
+        XCTAssertEqual(MarkdownDocument(markdown: "3.14 is pi").blocks[0].kind, .paragraph)
+    }
+
+    func testParagraphThatLooksNumberedIsEscaped() {
+        let doc = MarkdownDocument(blocks: [
+            MarkdownBlock(kind: .paragraph, runs: [InlineRun(text: "3. not a list")]),
+        ])
+        XCTAssertEqual(doc.markdown(), "3\\. not a list")
+        XCTAssertEqual(MarkdownDocument(markdown: doc.markdown()), doc)
+    }
+
     func testEscapesLiteralAsterisksAndBackslashes() {
         let doc = MarkdownDocument(blocks: [
             MarkdownBlock(kind: .paragraph, runs: [InlineRun(text: "2 * 3 \\ 4")]),

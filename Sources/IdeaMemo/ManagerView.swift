@@ -5,6 +5,7 @@ import SwiftUI
 /// The management window: browse, search, filter, tidy up and recover notes.
 struct ManagerView: View {
     @ObservedObject var manager: NoteManager
+    @Environment(\.colorScheme) private var colorScheme
 
     private enum Tab: Hashable { case notes, trash }
 
@@ -81,7 +82,7 @@ struct ManagerView: View {
                 .fixedSize()
 
                 if tab == .notes {
-                    Button { manager.createNote() } label: { Label(L("New Note"), systemImage: "plus") }
+                    Button { manager.createNote() } label: { Label(L("New Memo"), systemImage: "plus") }
                 } else {
                     Button(role: .destructive) { confirmEmptyTrash = true } label: {
                         Label(L("Empty Trash"), systemImage: "trash")
@@ -99,9 +100,22 @@ struct ManagerView: View {
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
+                planTag
             }
         }
         .padding(12)
+    }
+
+    /// FREE 3/10 or PRO.
+    private var planTag: some View {
+        let plan = manager.settings.plan
+        return Text(plan.tagText(currentCount: manager.activeNotes.count))
+            .font(.caption.weight(.bold))
+            .foregroundStyle(plan == .pro ? Color.orange : Color.secondary)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 3)
+            .background(plan == .pro ? Color.yellow.opacity(0.3) : Color.secondary.opacity(0.18), in: Capsule())
+            .help(plan == .pro ? L("Pro: unlimited memos") : L("Free plan: up to 10 memos"))
     }
 
     private func chip(_ color: NoteColor?) -> some View {
@@ -154,7 +168,8 @@ struct ManagerView: View {
     }
 
     private func card(_ note: Note) -> some View {
-        let ink: Color = note.color.prefersLightText ? .white : .black
+        let shown = note.color.displayColor(dark: colorScheme == .dark)
+        let ink: Color = shown.prefersLightText ? .white : .black
         let isSelected = selection.contains(note.id)
 
         return VStack(alignment: .leading, spacing: 6) {
@@ -174,7 +189,7 @@ struct ManagerView: View {
             .foregroundStyle(ink.opacity(0.55))
         }
         .padding(10)
-        .background(note.color.swiftUIColor, in: RoundedRectangle(cornerRadius: 4))
+        .background(shown.swiftUIColor, in: RoundedRectangle(cornerRadius: 4))
         .shadow(color: .black.opacity(0.15), radius: 4, y: 1)
         .overlay(alignment: .topTrailing) {
             if isSelected {

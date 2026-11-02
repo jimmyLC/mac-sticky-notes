@@ -142,6 +142,23 @@ final class NoteModelTests: XCTestCase {
 }
 
 final class NoteColorTests: XCTestCase {
+    func testDarkModeDeepensPastelsAndKeepsDarkColours() {
+        for preset in NoteColor.presets {
+            let dark = preset.displayColor(dark: true)
+            XCTAssertNotEqual(dark, preset)
+            XCTAssertTrue(dark.prefersLightText, "\(preset.hex) -> \(dark.hex)")
+            XCTAssertEqual(preset.displayColor(dark: false), preset)
+        }
+        let navy = NoteColor(hex: "#102030")
+        XCTAssertEqual(navy.displayColor(dark: true), navy)
+    }
+
+    func testDarkYellowStaysYellowish() {
+        let c = NoteColor.yellow.displayColor(dark: true).components
+        XCTAssertGreaterThan(c.red, c.blue)
+        XCTAssertGreaterThan(c.green, c.blue)
+    }
+
     func testPresetsMatchReferencePalette() {
         XCTAssertEqual(NoteColor.presets.map(\.hex), ["#FFF299", "#FFD9E6", "#D9EBFF", "#D9F7D9"])
     }
@@ -164,5 +181,30 @@ final class NoteColorTests: XCTestCase {
     func testCodableAsPlainString() throws {
         let data = try JSONEncoder().encode([NoteColor.pink])
         XCTAssertEqual(String(data: data, encoding: .utf8), "[\"#FFD9E6\"]")
+    }
+}
+
+
+final class PlanTests: XCTestCase {
+    func testFreeAllowsTenMemos() {
+        XCTAssertTrue(Plan.free.canCreateMemo(currentCount: 9))
+        XCTAssertFalse(Plan.free.canCreateMemo(currentCount: 10))
+        XCTAssertEqual(Plan.free.memoLimit, 10)
+    }
+
+    func testProIsUnlimited() {
+        XCTAssertTrue(Plan.pro.canCreateMemo(currentCount: 10_000))
+        XCTAssertNil(Plan.pro.memoLimit)
+    }
+
+    func testTagText() {
+        XCTAssertEqual(Plan.free.tagText(currentCount: 3), "FREE 3/10")
+        XCTAssertEqual(Plan.pro.tagText(currentCount: 3), "PRO")
+    }
+
+    func testNewNoteFieldsHaveSafeDefaults() throws {
+        let decoded = try JSONDecoder().decode(Note.self, from: Data(#"{"id":"6F9619FF-8B86-D011-B42D-00C04FC964FF","opacity":0.1}"#.utf8))
+        XCTAssertFalse(decoded.isShaded)
+        XCTAssertEqual(decoded.opacity, 0.35, accuracy: 0.0001)
     }
 }

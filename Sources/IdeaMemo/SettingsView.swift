@@ -25,15 +25,39 @@ struct SettingsView: View {
                         .foregroundStyle(.secondary)
                 }
 
+                Picker(L("Appearance"), selection: $settings.appearance) {
+                    ForEach(AppAppearance.allCases) { Text($0.label).tag($0) }
+                }
+                .pickerStyle(.segmented)
+
                 Picker(L("Text size"), selection: $settings.textSize) {
                     ForEach(TextSize.allCases) { Text($0.label).tag($0) }
                 }
                 .pickerStyle(.segmented)
 
-                LabeledContent(L("New note shortcut")) {
+                LabeledContent(L("New memo shortcut")) {
                     HotkeyRecorder(chord: $settings.hotkey)
                         .frame(width: 120, height: 24)
                 }
+            }
+
+            Section(L("Plan")) {
+                LabeledContent(L("Your plan")) {
+                    HStack(spacing: 10) {
+                        Text(settings.plan.tagText(currentCount: manager.activeNotes.count))
+                            .font(.caption.weight(.bold))
+                            .foregroundStyle(settings.isPro ? Color.orange : Color.secondary)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 3)
+                            .background(settings.isPro ? Color.yellow.opacity(0.3) : Color.secondary.opacity(0.18), in: Capsule())
+                        if !settings.isPro {
+                            Button(L("Upgrade to Pro…")) { Upgrade.present() }
+                        }
+                    }
+                }
+                Text(L("Free holds up to 10 memos. Pro has no limit."))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
 
             Section(L("Data")) {

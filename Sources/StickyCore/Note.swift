@@ -27,6 +27,10 @@ public struct Note: Codable, Identifiable, Equatable, Sendable {
     public var showOnAllSpaces: Bool
     /// Closed with the ✕ button: still listed in the manager, not shown on the desktop.
     public var isCollapsed: Bool
+    /// Double-clicking the title strip rolls the note up to just its title.
+    public var isShaded: Bool
+    /// Background opacity from 0.35 to 1; the text stays fully opaque.
+    public var opacity: Double
     public var createdAt: Date
     public var modifiedAt: Date
     public var deletedAt: Date?
@@ -39,6 +43,8 @@ public struct Note: Codable, Identifiable, Equatable, Sendable {
         alwaysOnTop: Bool = false,
         showOnAllSpaces: Bool = true,
         isCollapsed: Bool = false,
+        isShaded: Bool = false,
+        opacity: Double = 1,
         createdAt: Date = Date(),
         modifiedAt: Date = Date(),
         deletedAt: Date? = nil
@@ -50,6 +56,8 @@ public struct Note: Codable, Identifiable, Equatable, Sendable {
         self.alwaysOnTop = alwaysOnTop
         self.showOnAllSpaces = showOnAllSpaces
         self.isCollapsed = isCollapsed
+        self.isShaded = isShaded
+        self.opacity = opacity
         self.createdAt = createdAt
         self.modifiedAt = modifiedAt
         self.deletedAt = deletedAt
@@ -57,7 +65,7 @@ public struct Note: Codable, Identifiable, Equatable, Sendable {
 
     private enum CodingKeys: String, CodingKey {
         case id, markdown, color, frame, alwaysOnTop, showOnAllSpaces, isCollapsed
-        case createdAt, modifiedAt, deletedAt
+        case isShaded, opacity, createdAt, modifiedAt, deletedAt
     }
 
     public init(from decoder: Decoder) throws {
@@ -71,6 +79,8 @@ public struct Note: Codable, Identifiable, Equatable, Sendable {
         alwaysOnTop = try c.decodeIfPresent(Bool.self, forKey: .alwaysOnTop) ?? false
         showOnAllSpaces = try c.decodeIfPresent(Bool.self, forKey: .showOnAllSpaces) ?? true
         isCollapsed = try c.decodeIfPresent(Bool.self, forKey: .isCollapsed) ?? false
+        isShaded = try c.decodeIfPresent(Bool.self, forKey: .isShaded) ?? false
+        opacity = min(max(try c.decodeIfPresent(Double.self, forKey: .opacity) ?? 1, 0.35), 1)
         createdAt = try c.decodeIfPresent(Date.self, forKey: .createdAt) ?? now
         modifiedAt = try c.decodeIfPresent(Date.self, forKey: .modifiedAt) ?? now
         deletedAt = try c.decodeIfPresent(Date.self, forKey: .deletedAt)

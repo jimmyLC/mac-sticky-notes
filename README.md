@@ -9,8 +9,15 @@ desktop, come in several colours, and are easy to manage. Built with Swift (Swif
   on top and can appear on all desktops (Spaces) or just one.
 - **Colours** — four presets (yellow, pink, blue, green) plus any custom colour from the system colour
   panel. Text switches to white on dark colours.
-- **Simple editor** — bold (⌘B), italic (⌘I), bullet lists (`- `), checklists (`[] `, click to tick),
-  plain-text paste. Notes are stored as Markdown.
+- **Simple editor** — bold (⌘B), italic (⌘I), plain-text paste. Notes are stored as Markdown.
+- **Lists** — type `- ` for bullets, `1. ` for numbered lists, `[] ` for a checklist (click a box to tick it).
+  Return continues the list, a second Return ends it. Or use the list button on the hover toolbar, or
+  Format ▸ ⌘⇧8 bullets, ⌘⇧7 numbers, ⌘⇧L checklist (select several lines to convert them all).
+- **Roll up** — double-click a memo's title strip to shrink it to just the title; again to open it.
+- **Transparency** — per-memo slider (hover toolbar ▸ colour dot) for the background; text stays solid.
+- **Light / dark** — Settings ▸ Appearance: System, Light or Dark. In dark mode pastel memos become deep tones with light text.
+- **Free and Pro** — Free holds 10 memos, Pro is unlimited. A FREE 3/10 / PRO tag shows in the manager and Settings.
+  Purchasing is not built yet (the upgrade button says so); `--pro` unlocks Pro for testing.
 - **Manager window** — card grid with full-text search, colour filter, sorting, multi-select,
   and a trash (kept 30 days).
 - **Dock and menu bar** — shows in the Dock by default; turn "Show in Dock" off in Settings to keep it in the menu bar only. Global shortcut for a new note (default ⌃⌥N, changeable).

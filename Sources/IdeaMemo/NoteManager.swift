@@ -12,6 +12,10 @@ final class NoteManager: NSObject, ObservableObject, NSWindowDelegate {
     private var panels: [UUID: NotePanel] = [:]
     private var dirty = Set<UUID>()
     private var saveWork: DispatchWorkItem?
+    private var ignoreFrameUpdates = false
+
+    /// Height of a rolled-up note: just its title strip.
+    static let shadedHeight: CGFloat = 30
 
     init(store: NoteStore, settings: AppSettings) {
         self.store = store
@@ -46,8 +50,13 @@ final class NoteManager: NSObject, ObservableObject, NSWindowDelegate {
 
     // MARK: Creating
 
+    /// Returns nil, after explaining why, when the Free plan's memo limit is reached.
     @discardableResult
-    func createNote() -> UUID {
+    func createNote() -> UUID? {
+        guard settings.plan.canCreateMemo(currentCount: activeNotes.count) else {
+            presentLimitAlert()
+            return nil
+        }
         let note = Note(frame: defaultFrame())
         notes.append(note)
         persist(note.id)
@@ -100,9 +109,54 @@ final class NoteManager: NSObject, ObservableObject, NSWindowDelegate {
     }
 
     func updateFrame(_ id: UUID, _ rect: NSRect) {
-        guard let i = index(of: id) else { return }
-        notes[i].frame = NoteFrame(x: rect.minX, y: rect.minY, width: rect.width, height: rect.height)
+        guard !ignoreFrameUpdates, let i = index(of: id) else { return }
+        if notes[i].isShaded {
+            // A rolled-up note keeps its full height on record; its top edge stays put.
+            let height = notes[i].frame.height
+            notes[i].frame = NoteFrame(x: rect.minX, y: rect.maxY - height, width: rect.width, height: height)
+        } else {
+            notes[i].frame = NoteFrame(x: rect.minX, y: rect.minY, width: rect.width, height: rect.height)
+        }
         persist(id)
+    }
+
+    func setOpacity(_ id: UUID, _ opacity: Double) {
+        guard let i = index(of: id) else { return }
+        let clamped = min(max(opacity, 0.35), 1)
+        guard notes[i].opacity != clamped else { return }
+        notes[i].opacity = clamped
+        persist(id)
+    }
+
+    /// Double-click on the title strip: roll the note up to its title, or open it again.
+    func toggleShade(_ id: UUID) {
+        guard let i = index(of: id), let panel = panels[id] else { return }
+        ignoreFrameUpdates = true
+        defer { ignoreFrameUpdates = false }
+
+        let top = panel.frame.maxY
+        if notes[i].isShaded {
+            let height = notes[i].frame.height
+            notes[i].isShaded = false
+            notes[i].frame = NoteFrame(x: panel.frame.minX, y: top - height, width: panel.frame.width, height: height)
+            panel.minSize = NotePanel.normalMinSize
+            panel.maxSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
+            panel.setFrame(NSRect(x: panel.frame.minX, y: top - height, width: panel.frame.width, height: height), display: true)
+        } else {
+            let frame = panel.frame
+            notes[i].frame = NoteFrame(x: frame.minX, y: frame.minY, width: frame.width, height: frame.height)
+            notes[i].isShaded = true
+            panel.minSize = NSSize(width: NotePanel.normalMinSize.width, height: Self.shadedHeight)
+            panel.maxSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: Self.shadedHeight)
+            panel.setFrame(NSRect(x: frame.minX, y: top - Self.shadedHeight, width: frame.width, height: Self.shadedHeight), display: true)
+        }
+        persist(id)
+    }
+
+    func applyList(_ id: UUID, _ choice: RichNoteTextView.ListChoice) {
+        guard let panel = panels[id], let textView = panel.contentView?.firstDescendant(ofType: RichNoteTextView.self) else { return }
+        panel.makeFirstResponder(textView)
+        textView.applyList(choice)
     }
 
     // MARK: Showing and hiding
@@ -152,6 +206,10 @@ final class NoteManager: NSObject, ObservableObject, NSWindowDelegate {
 
     func restore(_ id: UUID) {
         guard let i = index(of: id) else { return }
+        guard settings.plan.canCreateMemo(currentCount: activeNotes.count) else {
+            presentLimitAlert()
+            return
+        }
         notes[i].deletedAt = nil
         notes[i].isCollapsed = false
         notes[i].modifiedAt = Date()
@@ -186,8 +244,14 @@ final class NoteManager: NSObject, ObservableObject, NSWindowDelegate {
             return
         }
 
-        let panel = NotePanel(noteID: id, frame: visibleFrame(for: note.frame))
+        var rect = visibleFrame(for: note.frame)
+        if note.isShaded { rect = NSRect(x: rect.minX, y: rect.maxY - Self.shadedHeight, width: rect.width, height: Self.shadedHeight) }
+        let panel = NotePanel(noteID: id, frame: rect)
         panel.delegate = self
+        if note.isShaded {
+            panel.minSize = NSSize(width: NotePanel.normalMinSize.width, height: Self.shadedHeight)
+            panel.maxSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: Self.shadedHeight)
+        }
         let host = NSHostingView(rootView: NoteView(manager: self, settings: settings, noteID: id))
         host.sizingOptions = []
         host.wantsLayer = true
@@ -234,6 +298,21 @@ final class NoteManager: NSObject, ObservableObject, NSWindowDelegate {
     private func frameChanged(_ notification: Notification) {
         guard let panel = notification.object as? NotePanel else { return }
         updateFrame(panel.noteID, panel.frame)
+    }
+
+    // MARK: Plan limit
+
+    private func presentLimitAlert() {
+        let alert = NSAlert()
+        alert.messageText = L("Free plan limit reached")
+        alert.informativeText = String(
+            format: L("The Free plan holds up to %d memos. Upgrade to Pro for unlimited memos, or delete one you no longer need."),
+            Plan.freeMemoLimit
+        )
+        alert.addButton(withTitle: L("OK"))
+        alert.addButton(withTitle: L("Upgrade to Pro…"))
+        NSApp.activate(ignoringOtherApps: true)
+        if alert.runModal() == .alertSecondButtonReturn { Upgrade.present() }
     }
 
     // MARK: Persistence

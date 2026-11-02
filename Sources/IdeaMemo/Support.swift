@@ -58,6 +58,42 @@ enum TextSize: Int, CaseIterable, Identifiable {
     var smaller: TextSize { self == .large ? .medium : .small }
 }
 
+enum AppAppearance: String, CaseIterable, Identifiable {
+    case system, light, dark
+
+    var id: String { rawValue }
+
+    var label: String {
+        switch self {
+        case .system: return L("System")
+        case .light: return L("Light")
+        case .dark: return L("Dark")
+        }
+    }
+
+    @MainActor
+    func apply() {
+        switch self {
+        case .system: NSApp.appearance = nil
+        case .light: NSApp.appearance = NSAppearance(named: .aqua)
+        case .dark: NSApp.appearance = NSAppearance(named: .darkAqua)
+        }
+    }
+}
+
+enum Upgrade {
+    /// Purchasing is not built yet; this tells the user so instead of doing nothing.
+    @MainActor
+    static func present() {
+        let alert = NSAlert()
+        alert.messageText = L("Pro is coming soon")
+        alert.informativeText = L("Unlimited memos will be available with Pro. Purchasing is not open yet.")
+        alert.addButton(withTitle: L("OK"))
+        NSApp.activate(ignoringOtherApps: true)
+        alert.runModal()
+    }
+}
+
 struct HotkeyChord: Codable, Equatable {
     var keyCode: UInt32
     var carbonModifiers: UInt32
@@ -85,6 +121,20 @@ final class AppSettings: ObservableObject {
         }
     }
 
+    @Published var appearance: AppAppearance {
+        didSet {
+            defaults.set(appearance.rawValue, forKey: "appearance")
+            appearance.apply()
+        }
+    }
+
+    /// Pro is a placeholder switch until purchasing is built; `--pro` unlocks it for testing.
+    @Published var isPro: Bool {
+        didSet { defaults.set(isPro, forKey: "isPro") }
+    }
+
+    var plan: Plan { isPro ? .pro : .free }
+
     /// Dock icon on by default; off keeps the app in the menu bar only.
     @Published var showInDock: Bool {
         didSet { defaults.set(showInDock, forKey: "showInDock") }
@@ -99,6 +149,8 @@ final class AppSettings: ObservableObject {
         self.defaults = defaults
         textSize = TextSize(rawValue: defaults.integer(forKey: "textSize")) ?? .medium
         showInDock = defaults.object(forKey: "showInDock") as? Bool ?? true
+        appearance = AppAppearance(rawValue: defaults.string(forKey: "appearance") ?? "") ?? .system
+        isPro = defaults.bool(forKey: "isPro") || CommandLine.arguments.contains("--pro")
         hotkey = defaults.data(forKey: "hotkey")
             .flatMap { try? JSONDecoder().decode(HotkeyChord.self, from: $0) } ?? .default
     }

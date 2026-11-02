@@ -29,6 +29,43 @@ public struct NoteColor: Hashable, Codable, Sendable {
         return 0.299 * c.red + 0.587 * c.green + 0.114 * c.blue < 0.5
     }
 
+    /// The colour to draw in dark mode: pastel notes become deep, saturated versions with light
+    /// text, while colours that are already dark are left alone.
+    public func displayColor(dark: Bool) -> NoteColor {
+        guard dark else { return self }
+        let c = components
+        let maximum = max(c.red, c.green, c.blue)
+        let minimum = min(c.red, c.green, c.blue)
+        guard maximum > 0.45 else { return self }
+
+        let delta = maximum - minimum
+        var hue = 0.0
+        if delta > 0 {
+            if maximum == c.red { hue = ((c.green - c.blue) / delta).truncatingRemainder(dividingBy: 6) }
+            else if maximum == c.green { hue = (c.blue - c.red) / delta + 2 }
+            else { hue = (c.red - c.green) / delta + 4 }
+            hue /= 6
+            if hue < 0 { hue += 1 }
+        }
+        let saturation = maximum == 0 ? 0 : delta / maximum
+        let newSaturation = min(1, saturation * 1.7 + 0.05)
+        let newValue = 0.38
+
+        let chroma = newValue * newSaturation
+        let x = chroma * (1 - abs((hue * 6).truncatingRemainder(dividingBy: 2) - 1))
+        let m = newValue - chroma
+        let (r, g, b): (Double, Double, Double)
+        switch Int(hue * 6) % 6 {
+        case 0: (r, g, b) = (chroma, x, 0)
+        case 1: (r, g, b) = (x, chroma, 0)
+        case 2: (r, g, b) = (0, chroma, x)
+        case 3: (r, g, b) = (0, x, chroma)
+        case 4: (r, g, b) = (x, 0, chroma)
+        default: (r, g, b) = (chroma, 0, x)
+        }
+        return NoteColor(red: r + m, green: g + m, blue: b + m)
+    }
+
     public init(from decoder: Decoder) throws {
         let raw = try decoder.singleValueContainer().decode(String.self)
         self.init(hex: raw)
