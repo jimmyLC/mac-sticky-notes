@@ -13,7 +13,7 @@ desktop, come in several colours, and are easy to manage. Built with Swift (Swif
   plain-text paste. Notes are stored as Markdown.
 - **Manager window** — card grid with full-text search, colour filter, sorting, multi-select,
   and a trash (kept 30 days).
-- **Menu bar app** — no Dock icon. Global shortcut for a new note (default ⌃⌥N, changeable).
+- **Dock and menu bar** — shows in the Dock by default; turn "Show in Dock" off in Settings to keep it in the menu bar only. Global shortcut for a new note (default ⌃⌥N, changeable).
 - **Local only** — one JSON file per note, a daily backup (last 7 kept), export all notes as `.md`.
 - English and Traditional Chinese.
 

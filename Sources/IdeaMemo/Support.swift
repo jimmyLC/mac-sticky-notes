@@ -85,6 +85,11 @@ final class AppSettings: ObservableObject {
         }
     }
 
+    /// Dock icon on by default; off keeps the app in the menu bar only.
+    @Published var showInDock: Bool {
+        didSet { defaults.set(showInDock, forKey: "showInDock") }
+    }
+
     var hasAskedLaunchAtLogin: Bool {
         get { defaults.bool(forKey: "hasAskedLaunchAtLogin") }
         set { defaults.set(newValue, forKey: "hasAskedLaunchAtLogin") }
@@ -93,6 +98,7 @@ final class AppSettings: ObservableObject {
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
         textSize = TextSize(rawValue: defaults.integer(forKey: "textSize")) ?? .medium
+        showInDock = defaults.object(forKey: "showInDock") as? Bool ?? true
         hotkey = defaults.data(forKey: "hotkey")
             .flatMap { try? JSONDecoder().decode(HotkeyChord.self, from: $0) } ?? .default
     }

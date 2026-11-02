@@ -72,3 +72,5 @@
 "View" = "檢視";
 "Yellow" = "黃色";
 "Your notes will be waiting on the desktop. You can change this in Settings." = "你的便利貼會在桌面上等著你，之後可在設定中更改。";
+"Show in Dock" = "在 Dock 顯示";
+"Turn off to keep Idea Memo in the menu bar only." = "關閉後，點子貼只會留在選單列。";

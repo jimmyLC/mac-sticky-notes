@@ -18,6 +18,13 @@ struct SettingsView: View {
                         do { try LoginItem.set(wanted) } catch { launchAtLogin = LoginItem.isEnabled }
                     }
 
+                VStack(alignment: .leading, spacing: 2) {
+                    Toggle(L("Show in Dock"), isOn: $settings.showInDock)
+                    Text(L("Turn off to keep Idea Memo in the menu bar only."))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+
                 Picker(L("Text size"), selection: $settings.textSize) {
                     ForEach(TextSize.allCases) { Text($0.label).tag($0) }
                 }

@@ -23,6 +23,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         NSApp.mainMenu = makeMainMenu()
+        applyDockPolicy()
         setUpStatusItem()
         manager.start()
         registerHotkey()
@@ -31,6 +32,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         settings.$hotkey
             .dropFirst()
             .sink { [weak self] _ in DispatchQueue.main.async { self?.registerHotkey() } }
+            .store(in: &cancellables)
+
+        settings.$showInDock
+            .dropFirst()
+            .sink { [weak self] _ in DispatchQueue.main.async { self?.applyDockPolicy(reactivate: true) } }
             .store(in: &cancellables)
 
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { [weak self] in self?.askAboutLaunchAtLoginOnce() }
@@ -45,8 +51,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Launching the app again while it runs (Finder, Spotlight) brings everything forward.
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
         manager.showAll()
-        openManager()
+        if !flag { openManager() }
         return true
+    }
+
+    /// Right-click menu on the Dock icon.
+    func applicationDockMenu(_ sender: NSApplication) -> NSMenu? {
+        let menu = NSMenu()
+        menu.addItem(withTitle: L("New Note"), action: #selector(newNote), keyEquivalent: "").target = self
+        menu.addItem(withTitle: L("Manage Notes…"), action: #selector(openManager), keyEquivalent: "").target = self
+        menu.addItem(withTitle: L("Settings…"), action: #selector(openSettings), keyEquivalent: "").target = self
+        return menu
+    }
+
+    // MARK: Dock icon
+
+    /// Dock icon on (regular app) or menu bar only (accessory app).
+    private func applyDockPolicy(reactivate: Bool = false) {
+        NSApp.setActivationPolicy(settings.showInDock ? .regular : .accessory)
+        // Switching policy drops focus; bring the window the user is working in back.
+        if reactivate {
+            NSApp.activate(ignoringOtherApps: true)
+            (settingsWindow ?? NSApp.windows.first { $0.isVisible })?.makeKeyAndOrderFront(nil)
+        }
     }
 
     // MARK: Data location
@@ -150,7 +177,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             )
             window.title = L("Settings")
             window.isReleasedWhenClosed = false
-            window.contentView = NSHostingView(rootView: SettingsView(settings: settings, manager: manager))
+            let host = NSHostingView(rootView: SettingsView(settings: settings, manager: manager))
+            window.contentView = host
+            window.setContentSize(host.fittingSize)
             window.center()
             settingsWindow = window
         }
