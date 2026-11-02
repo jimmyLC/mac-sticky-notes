@@ -92,8 +92,15 @@ let out = CGContext(
 )!
 out.interpolationQuality = .high
 out.setShadow(offset: CGSize(width: 0, height: -12), blur: 24, color: CGColor(gray: 0, alpha: 0.28))
-out.draw(tile, in: CGRect(x: 100, y: 100, width: 824, height: 824))
+// Keep the picture's proportions: fit it inside the 824px box.
+let fit = 824.0 / Double(max(tile.width, tile.height))
+let drawWidth = Double(tile.width) * fit
+let drawHeight = Double(tile.height) * fit
+out.draw(tile, in: CGRect(
+    x: (Double(canvas) - drawWidth) / 2, y: (Double(canvas) - drawHeight) / 2,
+    width: drawWidth, height: drawHeight
+))
 
 let rep = NSBitmapImageRep(cgImage: out.makeImage()!)
 try rep.representation(using: .png, properties: [:])!.write(to: URL(fileURLWithPath: args[2]))
-print("wrote \(args[2]): tile \(maxX - minX + 1)x\(maxY - minY + 1) -> 824x824")
+print("wrote \(args[2]): picture \(maxX - minX + 1)x\(maxY - minY + 1) fitted into 824px")
