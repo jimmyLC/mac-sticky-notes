@@ -31,6 +31,8 @@ Scripts/package-app.sh        # builds build/Mac Sticky Notes.app (sandboxed, ad
 open "build/Mac Sticky Notes.app"
 ```
 
+Developer hook: `open -n "build/Mac Sticky Notes.app" --args --export-to <folder inside the sandbox container>` exports all notes at launch and logs the result.
+
 Pass `SIGN_ID="Apple Development: …"` to sign with a real identity.
 
 ## Layout

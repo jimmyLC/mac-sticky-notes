@@ -26,6 +26,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         setUpStatusItem()
         manager.start()
         registerHotkey()
+        runExportHookIfRequested()
 
         settings.$hotkey
             .dropFirst()
@@ -56,6 +57,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
         return support.appendingPathComponent("MacStickyNotes", isDirectory: true).appendingPathComponent("Notes")
+    }
+
+    /// Developer hook: `--export-to <folder>` exports all notes at launch and logs the result,
+    /// so the sandboxed export path can be checked without the folder picker.
+    private func runExportHookIfRequested() {
+        let args = CommandLine.arguments
+        guard let flag = args.firstIndex(of: "--export-to"), flag + 1 < args.count else { return }
+        let folder = URL(fileURLWithPath: args[flag + 1], isDirectory: true)
+        do {
+            let count = try manager.exportAll(to: folder)
+            NSLog("MacStickyNotes export: wrote %d notes to %@", count, folder.path)
+        } catch {
+            NSLog("MacStickyNotes export failed: %@", String(describing: error))
+        }
     }
 
     // MARK: Hotkey and login
