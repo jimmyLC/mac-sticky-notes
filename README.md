@@ -42,6 +42,7 @@ Pass `SIGN_ID="Apple Development: …"` to sign with a real identity.
 | `Sources/StickyCore` | Testable core: Markdown model, rich-text bridge, note store, search, colours |
 | `Sources/MacStickyNotes` | The app: windows, editor, manager, settings, menu bar |
 | `Tests/StickyCoreTests` | Unit tests for the core |
+| `Design/AppIcon.svg` | App icon source (redraw of a yellow note with orange clip and an idea bulb); `Scripts/render-icon.swift` renders it to `AppIcon.png` |
 | `Scripts/package-app.sh` | Builds the `.app` bundle with Info.plist and sandbox entitlements |
 
 The app runs in the App Sandbox from the start, so it can later go to the Mac App Store.

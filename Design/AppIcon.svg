@@ -1,0 +1,67 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <defs>
+    <linearGradient id="tile" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#BFE3FF"/>
+      <stop offset="1" stop-color="#7FB8F5"/>
+    </linearGradient>
+    <linearGradient id="front" x1="0" y1="0" x2="0.35" y2="1">
+      <stop offset="0" stop-color="#FFE98A"/>
+      <stop offset="1" stop-color="#FFC93C"/>
+    </linearGradient>
+    <linearGradient id="back" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#F7B04A"/>
+      <stop offset="1" stop-color="#E8892A"/>
+    </linearGradient>
+    <linearGradient id="clip" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#F0703A"/>
+      <stop offset="0.55" stop-color="#E5532B"/>
+      <stop offset="1" stop-color="#C9431F"/>
+    </linearGradient>
+    <linearGradient id="glass" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#FFFFFF"/>
+      <stop offset="1" stop-color="#FFF3C2"/>
+    </linearGradient>
+    <filter id="tileShadow" x="-10%" y="-10%" width="120%" height="125%">
+      <feDropShadow dx="0" dy="14" stdDeviation="16" flood-color="#0B2A5B" flood-opacity="0.28"/>
+    </filter>
+    <filter id="noteShadow" x="-20%" y="-20%" width="140%" height="145%">
+      <feDropShadow dx="0" dy="16" stdDeviation="14" flood-color="#2A3F66" flood-opacity="0.30"/>
+    </filter>
+    <filter id="soft" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="5" stdDeviation="5" flood-color="#7A3A00" flood-opacity="0.25"/>
+    </filter>
+  </defs>
+
+  <!-- macOS tile -->
+  <rect x="100" y="100" width="824" height="824" rx="186" fill="url(#tile)" filter="url(#tileShadow)"/>
+
+  <!-- note stack -->
+  <g filter="url(#noteShadow)">
+    <rect x="318" y="288" width="440" height="490" rx="30" fill="url(#back)" transform="rotate(5 538 533)"/>
+    <rect x="276" y="262" width="450" height="490" rx="30" fill="url(#front)" transform="rotate(-3 501 507)"/>
+  </g>
+
+  <!-- clip -->
+  <g transform="rotate(-3 501 507)" filter="url(#soft)">
+    <rect x="452" y="196" width="78" height="128" rx="38" fill="url(#clip)"/>
+    <rect x="466" y="212" width="16" height="92" rx="8" fill="#FFFFFF" opacity="0.28"/>
+  </g>
+
+  <!-- idea light bulb -->
+  <g transform="rotate(-3 501 507)">
+    <g stroke="#E9861F" stroke-width="15" stroke-linecap="round">
+      <line x1="500" y1="372" x2="500" y2="344"/>
+      <line x1="414" y1="406" x2="394" y2="386"/>
+      <line x1="586" y1="406" x2="606" y2="386"/>
+      <line x1="372" y1="492" x2="344" y2="492"/>
+      <line x1="628" y1="492" x2="656" y2="492"/>
+    </g>
+    <g stroke="#E9861F" stroke-width="15" stroke-linejoin="round" stroke-linecap="round">
+      <path d="M 455 540 C 430 520 418 498 418 472 C 418 424 454 392 500 392 C 546 392 582 424 582 472 C 582 498 570 520 545 540 L 545 580 L 455 580 Z" fill="url(#glass)"/>
+      <path d="M 458 580 L 542 580 L 542 604 L 458 604 Z" fill="#FFE49A"/>
+      <path d="M 470 604 L 530 604 L 530 626 C 530 636 516 642 500 642 C 484 642 470 636 470 626 Z" fill="#FFE49A"/>
+    </g>
+    <path d="M 476 580 L 476 506 L 500 540 L 524 506 L 524 580" fill="none" stroke="#E9861F" stroke-width="11" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M 446 452 C 450 430 466 414 486 408" fill="none" stroke="#FFFFFF" stroke-width="12" stroke-linecap="round" opacity="0.9"/>
+  </g>
+</svg>
