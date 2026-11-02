@@ -107,6 +107,10 @@ final class NoteModelTests: XCTestCase {
         XCTAssertEqual(note("").title, "")
     }
 
+    func testPreviewKeepsListMarkers() {
+        XCTAssertEqual(note("Todo\n- a\n- [ ] b\n- [x] **c**").previewText, "Todo\n• a\n☐ b\n☑ c")
+    }
+
     func testBlankDetection() {
         XCTAssertTrue(note("  \n \n").isBlank)
         XCTAssertFalse(note("x").isBlank)

@@ -36,6 +36,25 @@ final class MarkdownDocumentTests: XCTestCase {
         roundTrip("bold then **b***i*")
     }
 
+    func testWhitespaceAtEdgesOfEmphasisStaysOutsideTheMarkers() {
+        let doc = MarkdownDocument(blocks: [
+            MarkdownBlock(kind: .paragraph, runs: [
+                InlineRun(text: "call mom"),
+                InlineRun(text: " bold ", bold: true),
+                InlineRun(text: "end"),
+            ]),
+        ])
+        XCTAssertEqual(doc.markdown(), "call mom **bold** end")
+        XCTAssertEqual(MarkdownDocument(markdown: doc.markdown()).plainText, "call mom bold end")
+    }
+
+    func testBoldWhitespaceOnlyRunBecomesPlain() {
+        let doc = MarkdownDocument(blocks: [
+            MarkdownBlock(kind: .paragraph, runs: [InlineRun(text: "a"), InlineRun(text: "  ", bold: true), InlineRun(text: "b")]),
+        ])
+        XCTAssertEqual(doc.markdown(), "a  b")
+    }
+
     func testEscapesLiteralAsterisksAndBackslashes() {
         let doc = MarkdownDocument(blocks: [
             MarkdownBlock(kind: .paragraph, runs: [InlineRun(text: "2 * 3 \\ 4")]),

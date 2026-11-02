@@ -161,6 +161,54 @@ public struct MarkdownDocument: Equatable, Sendable {
         }
     }
 
+    /// Merges neighbours with the same style and moves whitespace at the edges of bold/italic
+    /// runs outside the markers, because `** bold**` is not emphasis in standard Markdown.
+    static func normalizedRuns(_ runs: [InlineRun]) -> [InlineRun] {
+        func merge(_ input: [InlineRun]) -> [InlineRun] {
+            var result: [InlineRun] = []
+            for run in input where !run.text.isEmpty {
+                if var last = result.last, last.bold == run.bold, last.italic == run.italic {
+                    last.text += run.text
+                    result[result.count - 1] = last
+                } else {
+                    result.append(run)
+                }
+            }
+            return result
+        }
+
+        // Whitespace keeps only the styles it shares with its neighbour, so spaces inside one
+        // emphasis span stay inside it and only the outer edges move out.
+        func shared(_ a: InlineRun, _ b: InlineRun) -> (bold: Bool, italic: Bool) {
+            (a.bold && b.bold, a.italic && b.italic)
+        }
+
+        let merged = merge(runs)
+        let plain = InlineRun(text: "")
+        var spread: [InlineRun] = []
+        for (index, run) in merged.enumerated() {
+            guard run.bold || run.italic else { spread.append(run); continue }
+            let previous = index > 0 ? merged[index - 1] : plain
+            let next = index < merged.count - 1 ? merged[index + 1] : plain
+            let leadStyle = shared(run, previous)
+            let trailStyle = shared(run, next)
+
+            let leading = String(run.text.prefix(while: \.isWhitespace))
+            let afterLeading = run.text.dropFirst(leading.count)
+            let trailing = String(afterLeading.reversed().prefix(while: \.isWhitespace).reversed())
+            let core = String(afterLeading.dropLast(trailing.count))
+            if core.isEmpty {
+                let both = (bold: leadStyle.bold && trailStyle.bold, italic: leadStyle.italic && trailStyle.italic)
+                spread.append(InlineRun(text: run.text, bold: both.bold, italic: both.italic))
+                continue
+            }
+            spread.append(InlineRun(text: leading, bold: leadStyle.bold, italic: leadStyle.italic))
+            spread.append(InlineRun(text: core, bold: run.bold, italic: run.italic))
+            spread.append(InlineRun(text: trailing, bold: trailStyle.bold, italic: trailStyle.italic))
+        }
+        return merge(spread)
+    }
+
     static func serializeInline(_ runs: [InlineRun]) -> String {
         var out = ""
         var bold = false
@@ -172,7 +220,7 @@ public struct MarkdownDocument: Equatable, Sendable {
             else if italicChanged { out += "*" }
         }
 
-        for run in runs where !run.text.isEmpty {
+        for run in normalizedRuns(runs) {
             emitToggles(boldChanged: run.bold != bold, italicChanged: run.italic != italic)
             bold = run.bold
             italic = run.italic

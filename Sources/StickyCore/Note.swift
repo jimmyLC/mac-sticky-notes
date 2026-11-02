@@ -78,6 +78,13 @@ public struct Note: Codable, Identifiable, Equatable, Sendable {
 
     public var plainText: String { MarkdownDocument(markdown: markdown).plainText }
 
+    /// Plain text with list markers (• ☐ ☑), as shown on a manager card.
+    public var previewText: String {
+        MarkdownDocument(markdown: markdown).blocks
+            .map { ListMarker.text(for: $0.kind) + $0.plainText }
+            .joined(separator: "\n")
+    }
+
     /// First non-empty line, shown in the note header and the manager.
     public var title: String {
         for line in plainText.split(separator: "\n") {
