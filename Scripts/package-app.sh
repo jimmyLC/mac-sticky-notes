@@ -1,23 +1,23 @@
 #!/bin/bash
-# Builds a release "Mac Sticky Notes.app" in ./build, sandboxed and code signed.
+# Builds a release "Idea Memo.app" in ./build, sandboxed and code signed.
 # Usage: Scripts/package-app.sh            (ad-hoc signature, fine for running locally)
 #        SIGN_ID="Apple Development: ..." Scripts/package-app.sh
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
 ROOT="$PWD"
-APP="$ROOT/build/Mac Sticky Notes.app"
+APP="$ROOT/build/Idea Memo.app"
 VERSION="${VERSION:-0.1.0}"
-BUNDLE_ID="${BUNDLE_ID:-com.jimmy-tools.macstickynotes}"
+BUNDLE_ID="${BUNDLE_ID:-com.jimmy-tools.ideamemo}"
 SIGN_ID="${SIGN_ID:--}"
 
 swift build -c release
-BIN="$(swift build -c release --show-bin-path)/MacStickyNotes"
+BIN="$(swift build -c release --show-bin-path)/IdeaMemo"
 
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
-cp "$BIN" "$APP/Contents/MacOS/MacStickyNotes"
-cp -R Sources/MacStickyNotes/Localization/*.lproj "$APP/Contents/Resources/"
+cp "$BIN" "$APP/Contents/MacOS/IdeaMemo"
+cp -R Sources/IdeaMemo/Localization/*.lproj "$APP/Contents/Resources/"
 
 # App icon: Design/AppIcon.png (1024px) -> AppIcon.icns
 ICONSET="$ROOT/build/AppIcon.iconset"
@@ -38,10 +38,10 @@ cat > "$APP/Contents/Info.plist" <<PLIST
     <key>CFBundleDevelopmentRegion</key><string>en</string>
     <key>CFBundleLocalizations</key><array><string>en</string><string>zh-Hant</string></array>
     <key>CFBundleIconFile</key><string>AppIcon</string>
-    <key>CFBundleExecutable</key><string>MacStickyNotes</string>
+    <key>CFBundleExecutable</key><string>IdeaMemo</string>
     <key>CFBundleIdentifier</key><string>${BUNDLE_ID}</string>
-    <key>CFBundleName</key><string>Mac Sticky Notes</string>
-    <key>CFBundleDisplayName</key><string>Mac Sticky Notes</string>
+    <key>CFBundleName</key><string>Idea Memo</string>
+    <key>CFBundleDisplayName</key><string>Idea Memo</string>
     <key>CFBundlePackageType</key><string>APPL</string>
     <key>CFBundleShortVersionString</key><string>${VERSION}</string>
     <key>CFBundleVersion</key><string>1</string>
@@ -53,6 +53,6 @@ cat > "$APP/Contents/Info.plist" <<PLIST
 </plist>
 PLIST
 
-codesign --force --options runtime --entitlements Scripts/MacStickyNotes.entitlements --sign "$SIGN_ID" "$APP"
+codesign --force --options runtime --entitlements Scripts/IdeaMemo.entitlements --sign "$SIGN_ID" "$APP"
 codesign --verify --strict "$APP"
 echo "Built: $APP"

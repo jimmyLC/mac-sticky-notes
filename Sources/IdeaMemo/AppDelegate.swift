@@ -56,7 +56,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return URL(fileURLWithPath: override, isDirectory: true).appendingPathComponent("Notes")
         }
         let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-        return support.appendingPathComponent("MacStickyNotes", isDirectory: true).appendingPathComponent("Notes")
+        return support.appendingPathComponent("IdeaMemo", isDirectory: true).appendingPathComponent("Notes")
     }
 
     /// Developer hook: `--export-to <folder>` exports all notes at launch and logs the result,
@@ -67,9 +67,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let folder = URL(fileURLWithPath: args[flag + 1], isDirectory: true)
         do {
             let count = try manager.exportAll(to: folder)
-            NSLog("MacStickyNotes export: wrote %d notes to %@", count, folder.path)
+            NSLog("IdeaMemo export: wrote %d notes to %@", count, folder.path)
         } catch {
-            NSLog("MacStickyNotes export failed: %@", String(describing: error))
+            NSLog("IdeaMemo export failed: %@", String(describing: error))
         }
     }
 
@@ -86,7 +86,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         settings.hasAskedLaunchAtLogin = true
 
         let alert = NSAlert()
-        alert.messageText = L("Open Mac Sticky Notes when you log in?")
+        alert.messageText = L("Open Idea Memo when you log in?")
         alert.informativeText = L("Your notes will be waiting on the desktop. You can change this in Settings.")
         alert.addButton(withTitle: L("OK"))
         let checkbox = NSButton(checkboxWithTitle: L("Launch at login"), target: nil, action: nil)
@@ -102,7 +102,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func setUpStatusItem() {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
         if let button = statusItem.button {
-            button.image = NSImage(systemSymbolName: "note.text", accessibilityDescription: L("Mac Sticky Notes"))
+            button.image = NSImage(systemSymbolName: "note.text", accessibilityDescription: L("Idea Memo"))
             button.image?.isTemplate = true
         }
         let menu = NSMenu()
@@ -112,7 +112,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menu.addItem(.separator())
         menu.addItem(withTitle: L("Settings…"), action: #selector(openSettings), keyEquivalent: "").target = self
         menu.addItem(.separator())
-        menu.addItem(withTitle: L("Quit Mac Sticky Notes"), action: #selector(NSApplication.terminate(_:)), keyEquivalent: "")
+        menu.addItem(withTitle: L("Quit Idea Memo"), action: #selector(NSApplication.terminate(_:)), keyEquivalent: "")
         statusItem.menu = menu
     }
 
@@ -190,10 +190,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return item
         }
 
-        add(L("Mac Sticky Notes"), to: main, [
+        add(L("Idea Memo"), to: main, [
             item(L("Settings…"), #selector(openSettings), ",", target: self),
             .separator(),
-            item(L("Quit Mac Sticky Notes"), #selector(NSApplication.terminate(_:)), "q"),
+            item(L("Quit Idea Memo"), #selector(NSApplication.terminate(_:)), "q"),
         ])
         add(L("File"), to: main, [
             item(L("New Note"), #selector(newNote), "n", target: self),

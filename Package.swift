@@ -2,17 +2,17 @@
 import PackageDescription
 
 let package = Package(
-    name: "MacStickyNotes",
+    name: "IdeaMemo",
     platforms: [.macOS(.v14)],
     products: [
-        .executable(name: "MacStickyNotes", targets: ["MacStickyNotes"]),
+        .executable(name: "IdeaMemo", targets: ["IdeaMemo"]),
     ],
     targets: [
         .target(name: "StickyCore", path: "Sources/StickyCore"),
         .executableTarget(
-            name: "MacStickyNotes",
+            name: "IdeaMemo",
             dependencies: ["StickyCore"],
-            path: "Sources/MacStickyNotes",
+            path: "Sources/IdeaMemo",
             exclude: ["Localization"]
         ),
         .testTarget(

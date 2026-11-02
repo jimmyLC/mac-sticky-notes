@@ -29,7 +29,7 @@
 "Large" = "大";
 "Larger Text" = "放大文字";
 "Launch at login" = "開機時自動啟動";
-"Mac Sticky Notes" = "Mac 便利貼";
+"Idea Memo" = "點子貼";
 "Manage Notes" = "管理便利貼";
 "Manage Notes…" = "管理便利貼…";
 "Medium" = "中";
@@ -43,10 +43,10 @@
 "Notes folder" = "便利貼資料夾";
 "Notes in the trash are deleted after 30 days." = "垃圾桶內的便利貼會在 30 天後自動刪除。";
 "OK" = "好";
-"Open Mac Sticky Notes when you log in?" = "登入時自動開啟 Mac 便利貼？";
+"Open Idea Memo when you log in?" = "登入時自動開啟點子貼？";
 "Paste" = "貼上";
 "Pink" = "粉紅";
-"Quit Mac Sticky Notes" = "結束 Mac 便利貼";
+"Quit Idea Memo" = "結束點子貼";
 "Recently Created" = "最近建立";
 "Recently Edited" = "最近編輯";
 "Redo" = "重做";

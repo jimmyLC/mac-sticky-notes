@@ -1,9 +1,7 @@
-# Mac Sticky Notes
+# Idea Memo｜點子貼
 
 A small, native macOS sticky-notes app in the spirit of Microsoft Sticky Notes: notes sit on your
 desktop, come in several colours, and are easy to manage. Built with Swift (SwiftUI + AppKit).
-
-Working name — the app may be renamed before any release.
 
 ## Features
 
@@ -27,11 +25,11 @@ macOS 14 or later, Xcode 16+ (Swift 6 toolchain).
 
 ```bash
 swift test                    # unit tests (Markdown, store, search, rich-text bridge)
-Scripts/package-app.sh        # builds build/Mac Sticky Notes.app (sandboxed, ad-hoc signed)
-open "build/Mac Sticky Notes.app"
+Scripts/package-app.sh        # builds build/Idea Memo.app (sandboxed, ad-hoc signed)
+open "build/Idea Memo.app"
 ```
 
-Developer hook: `open -n "build/Mac Sticky Notes.app" --args --export-to <folder inside the sandbox container>` exports all notes at launch and logs the result.
+Developer hook: `open -n "build/Idea Memo.app" --args --export-to <folder inside the sandbox container>` exports all notes at launch and logs the result.
 
 Pass `SIGN_ID="Apple Development: …"` to sign with a real identity.
 
@@ -40,9 +38,9 @@ Pass `SIGN_ID="Apple Development: …"` to sign with a real identity.
 | Path | What it holds |
 | --- | --- |
 | `Sources/StickyCore` | Testable core: Markdown model, rich-text bridge, note store, search, colours |
-| `Sources/MacStickyNotes` | The app: windows, editor, manager, settings, menu bar |
+| `Sources/IdeaMemo` | The app: windows, editor, manager, settings, menu bar |
 | `Tests/StickyCoreTests` | Unit tests for the core |
-| `Design/AppIcon.svg` | App icon source (redraw of a yellow note with orange clip and an idea bulb); `Scripts/render-icon.swift` renders it to `AppIcon.png` |
+| `Design/` | App icon: `AppIcon-source.webp` is the artwork; `Scripts/make-icon.swift` turns it into the transparent 1024px `AppIcon.png` |
 | `Scripts/package-app.sh` | Builds the `.app` bundle with Info.plist and sandbox entitlements |
 
 The app runs in the App Sandbox from the start, so it can later go to the Mac App Store.
