@@ -41,24 +41,7 @@ struct SettingsView: View {
                 }
             }
 
-            Section(L("Plan")) {
-                LabeledContent(L("Your plan")) {
-                    HStack(spacing: 10) {
-                        Text(settings.plan.tagText(currentCount: manager.activeNotes.count))
-                            .font(.caption.weight(.bold))
-                            .foregroundStyle(settings.isPro ? Color.orange : Color.secondary)
-                            .padding(.horizontal, 8)
-                            .padding(.vertical, 3)
-                            .background(settings.isPro ? Color.yellow.opacity(0.3) : Color.secondary.opacity(0.18), in: Capsule())
-                        if !settings.isPro {
-                            Button(L("Upgrade to Pro…")) { Upgrade.present() }
-                        }
-                    }
-                }
-                Text(L("Free holds up to 10 memos. Pro has no limit."))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
+            ProSection(license: settings.license, memoCount: manager.activeNotes.count)
 
             Section(L("Data")) {
                 LabeledContent(L("Notes folder")) {

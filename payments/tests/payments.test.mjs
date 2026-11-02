@@ -1,0 +1,259 @@
+import {test} from 'node:test';
+import assert from 'node:assert/strict';
+import {DatabaseSync} from 'node:sqlite';
+import {readFileSync} from 'node:fs';
+import worker from '../src/worker.mjs';
+import {bytes,randomToken,hmacHex,verifyWebhookSignature,unbase64url} from '../src/crypto.mjs';
+function database() {
+  const raw=new DatabaseSync(':memory:');
+  for(const file of ['0001_orders.sql','0002_shopline.sql','0003_devices_email.sql']) raw.exec(readFileSync(new URL('../migrations/'+file,import.meta.url),'utf8'));
+  return {raw,prepare(sql) {return {bind(...args) {return {
+    async first(){return raw.prepare(sql).get(...args) ?? null;},async all(){return {results:raw.prepare(sql).all(...args)};},async run(){return raw.prepare(sql).run(...args);}
+  };}};},async batch(items){return Promise.all(items.map(i=>i.run()));}};
+}
+const SIGN_KEY='test-sign-key-0123456789';
+async function setup(environment='staging') {
+  const keys=await crypto.subtle.generateKey({name:'ECDSA',namedCurve:'P-256'},true,['sign','verify']);
+  return {DB:database(),PAYMENT_ENV:environment,PRICE_TWD:'120',CHECKOUT_ENABLED:'true',APPLE_PAY_ENABLED:'true',
+    PUBLIC_BASE_URL:'https://pay.example.com',CALLBACK_BASE_URL:'https://callback.example.com',
+    SHOPLINE_MERCHANT_ID:'merchant-1',SHOPLINE_API_KEY:'api-key-0123456789',SHOPLINE_SIGN_KEY:SIGN_KEY,
+    EMAIL:{sent:[],async send(message){this.sent.push(message);return {messageId:'m'+this.sent.length};}},
+    DATA_KEY:randomToken(),LOOKUP_KEY:randomToken(),LICENSE_SIGNING_JWK:JSON.stringify(await crypto.subtle.exportKey('jwk',keys.privateKey)),keys};
+}
+// 模擬 SHOPLINE API；記錄每次呼叫，供斷言標頭與內容。
+const calls=[];
+let tradeReply=null;
+let sessionReply=null;
+globalThis.fetch=async (url,init)=>{
+  const body=JSON.parse(init.body);calls.push({url,headers:init.headers,body});
+  const json=(data,status=200)=>new Response(JSON.stringify(data),{status,headers:{'Content-Type':'application/json'}});
+  if(url.endsWith('/api/v1/trade/sessions/create'))
+    return json({sessionId:'se_'+body.referenceId,referenceId:body.referenceId,status:'CREATED',sessionUrl:'https://api-sandbox.shoplinepayments.com/checkout/session?sessionToken=abc'});
+  if(url.endsWith('/api/v1/trade/sessions/query')) return sessionReply?json(sessionReply(body)):json({code:'1016',msg:'Record does not exist'},400);
+  if(url.endsWith('/api/v1/trade/payment/get')) return tradeReply?json(tradeReply(body)):json({code:'1004',msg:'Param error'},400);
+  throw new Error('unexpected fetch '+url);
+};
+const req=(path,options={})=>new Request('https://pay.example.com'+path,options);
+const post=(path,data,headers={})=>req(path,{method:'POST',headers:{'Content-Type':'application/json',...headers},body:JSON.stringify(data)});
+async function order(env,extra={}) {
+  env0=env;
+  const data={email:'Buyer@example.com',method:'ApplePay',accessToken:randomToken(),...extra};
+  const r=await worker.fetch(post('/v1/orders',data),env);
+  assert.equal(r.status,201,await r.clone().text());
+  return {...data,...await r.json()};
+}
+// 實測正式 API 的形狀：referenceOrderId 是 SHOPLINE 的 RL… 編號，我們的編號在 order.customer.referenceCustomerId。
+const sessionOf=o=>env0.DB.raw.prepare('SELECT session_id FROM orders WHERE id=?').get(o.orderId)?.session_id;
+let env0=null;
+const trade=(o,extra={})=>({tradeOrderId:'T'+o.orderId,referenceOrderId:'RL0000000000000000000000000001',status:'SUCCEEDED',sessionId:sessionOf(o),
+  order:{amount:{value:12000,currency:'TWD'},customer:{referenceCustomerId:o.orderId},referenceOrderId:'RL0000000000000000000000000001'},
+  payment:{paidAmount:{value:12000,currency:'TWD'}},...extra});
+async function webhook(env,o,{type='trade.succeeded',data={},timestamp=String(Date.now()),sign=true,reply}={}) {
+  tradeReply=reply===undefined?t=>trade(o,{tradeOrderId:t.tradeOrderId}):reply;
+  const raw=JSON.stringify({id:'evt1',type,created:Date.now(),data:{tradeOrderId:'T'+o.orderId,referenceOrderId:'RL0000000000000000000000000001',order:{customer:{referenceCustomerId:o.orderId}},...data}});
+  const signature=sign?await hmacHex(SIGN_KEY,`${timestamp}.${raw}`):'0'.repeat(64);
+  return worker.fetch(req('/shopline/webhook',{method:'POST',headers:{'Content-Type':'application/json',timestamp,sign:signature},body:raw}),env);
+}
+const status=(env,o,token=o.accessToken)=>worker.fetch(req('/v1/orders/'+o.orderId,{headers:{Authorization:'Bearer '+token}}),env);
+test('Webhook 簽章：timestamp.body 的 HMAC-SHA256，竄改與錯誤格式皆拒絕',async()=>{
+  const sign=await hmacHex(SIGN_KEY,'1760000000000.{"a":1}');
+  assert.match(sign,/^[0-9a-f]{64}$/);
+  assert.equal(await verifyWebhookSignature('1760000000000','{"a":1}',sign,SIGN_KEY),true);
+  assert.equal(await verifyWebhookSignature('1760000000000','{"a":2}',sign,SIGN_KEY),false);
+  assert.equal(await verifyWebhookSignature('1760000000001','{"a":1}',sign,SIGN_KEY),false);
+  assert.equal(await verifyWebhookSignature('1760000000000','{"a":1}','bad',SIGN_KEY),false);
+  assert.equal(await verifyWebhookSignature('1760000000000','{"a":1}',sign,'other-key-0123456789'),false);
+});
+test('固定金額、加密、冪等、結帳導轉與訂單查詢權限',async()=>{
+  calls.length=0;
+  const env=await setup(),o=await order(env,{amount:1});
+  assert.equal(o.amount,120);
+  const row=env.DB.raw.prepare('SELECT * FROM orders').get();
+  assert.equal(row.amount,120);assert.equal(row.private_data.includes('buyer'),false);
+  const retry=await worker.fetch(post('/v1/orders',o),env);assert.equal(retry.status,200);
+  assert.equal((await retry.json()).orderId,o.orderId);
+  assert.equal(env.DB.raw.prepare('SELECT count(*) AS n FROM orders').get().n,1);
+  const page=await worker.fetch(new Request(o.checkoutURL),env);
+  assert.equal(page.status,302);
+  assert.match(page.headers.get('Location'),/^https:\/\/api-sandbox\.shoplinepayments\.com\/checkout\/session/);
+  const [call]=calls;
+  assert.equal(call.url,'https://api-sandbox.shoplinepayments.com/api/v1/trade/sessions/create');
+  assert.equal(call.body.amount.value,12000);assert.equal(call.body.amount.currency,'TWD');
+  assert.deepEqual(call.body.allowPaymentMethodList,['ApplePay']);assert.equal(call.body.referenceId,o.orderId);
+  assert.equal(call.body.returnUrl,'https://pay.example.com/thanks');
+  assert.equal(call.body.order.shipping.shippingMethod,'digital');assert.equal(call.body.order.shipping.address.countryCode,'TW');
+  assert.equal(call.body.billing.address.countryCode,'TW');
+  assert.equal(call.headers.merchantId,'merchant-1');assert.equal(call.headers.apiKey,'api-key-0123456789');
+  assert.match(call.headers.requestId,/^[0-9a-f]{32}$/);
+  assert.doesNotMatch(JSON.stringify(call.body),/api-key-0123456789|test-sign-key/);
+  // 再開同一個結帳連結不會重複建立 session。
+  const again=await worker.fetch(new Request(o.checkoutURL),env);assert.equal(again.status,302);assert.equal(calls.length,1);
+  assert.equal((await status(env,o,randomToken())).status,404);
+  assert.deepEqual(await (await status(env,o)).json(),{status:'pending'});
+});
+test('信用卡訂單送出 CreditCard；供應商回應異常時不導轉',async()=>{
+  calls.length=0;
+  const env=await setup(),o=await order(env,{method:'Credit'});
+  await worker.fetch(new Request(o.checkoutURL),env);
+  assert.deepEqual(calls[0].body.allowPaymentMethodList,['CreditCard']);
+  const real=globalThis.fetch;
+  globalThis.fetch=async()=>new Response(JSON.stringify({code:'1004'}),{status:400});
+  const bad=await order(env,{method:'Credit'});
+  assert.equal((await worker.fetch(new Request(bad.checkoutURL),env)).status,502);
+  globalThis.fetch=async()=>new Response(JSON.stringify({sessionId:'s',referenceId:bad.orderId,sessionUrl:'https://evil.example/pay'}),{status:200});
+  assert.equal((await worker.fetch(new Request(bad.checkoutURL),env)).status,502);
+  globalThis.fetch=real;
+});
+test('未付款、前景跳轉、偽造簽章／過期時間／金額／訂單均不啟用',async()=>{
+  const env=await setup(),o=await order(env);
+  assert.equal((await worker.fetch(post('/v1/licenses/activate',{email:o.email,serial:'IDM-'+'A'.repeat(40)}),env)).status,403);
+  assert.equal((await webhook(env,o,{sign:false})).status,401);
+  assert.equal((await webhook(env,o,{timestamp:String(Date.now()-10*60*1000)})).status,401);
+  for(const reply of [t=>trade(o,{payment:{paidAmount:{value:100,currency:'TWD'}}}),t=>trade(o,{sessionId:'se_other',order:{customer:{referenceCustomerId:'MOTHERORDER0000000000'}}}),
+    t=>trade(o,{status:'FAILED'}),t=>trade(o,{tradeOrderId:'other'}),null]) {
+    if(reply===null) assert.equal((await webhook(env,o,{reply})).status,502);
+    else assert.equal((await webhook(env,o,{reply})).status,200);
+    assert.equal((await (await status(env,o)).json()).status,'pending');
+  }
+  assert.equal((await webhook(env,o,{type:'trade.failed'})).status,200);
+  await worker.fetch(req('/thanks?status=SUCCEEDED'),env);
+  assert.equal((await (await status(env,o)).json()).status,'pending');
+});
+test('付款通知、重送、Email＋序號恢復、撤銷與簽章',async()=>{
+  const env=await setup(),o=await order(env);
+  assert.equal((await webhook(env,o)).status,200);
+  const first=env.DB.raw.prepare('SELECT * FROM orders').get();
+  assert.equal(first.status,'paid');assert.equal(first.provider_trade_no,'T'+o.orderId);
+  for(let i=0;i<3;i++)assert.equal((await webhook(env,o)).status,200);
+  assert.equal(env.DB.raw.prepare('SELECT * FROM orders').get().paid_at,first.paid_at);
+  const result=await (await status(env,o)).json();assert.equal(result.status,'paid');assert.equal(result.email,'buyer@example.com');
+  const [payload,signature]=result.licenseToken.split('.');
+  assert.equal(await crypto.subtle.verify({name:'ECDSA',hash:'SHA-256'},env.keys.publicKey,unbase64url(signature),bytes(payload)),true);
+  const claims=JSON.parse(new TextDecoder().decode(unbase64url(payload)));
+  assert.equal(claims.lifetime,true);assert.equal(claims.environment,'staging');
+  assert.equal((await worker.fetch(post('/v1/licenses/activate',{email:' BUYER@example.com ',serial:result.serial}),env)).status,200);
+  assert.equal((await worker.fetch(post('/v1/licenses/activate',{email:'other@example.com',serial:result.serial}),env)).status,403);
+  env.DB.raw.prepare("UPDATE orders SET status='revoked'").run();
+  assert.equal((await worker.fetch(post('/v1/licenses/activate',{email:result.email,serial:result.serial}),env)).status,409);
+  await webhook(env,o);assert.equal(env.DB.raw.prepare('SELECT status FROM orders').get().status,'revoked');
+});
+test('正式環境使用正式 API 網址',async()=>{
+  calls.length=0;
+  const env=await setup('production'),o=await order(env);
+  await worker.fetch(new Request(o.checkoutURL),env);
+  assert.equal(calls[0].url,'https://api.shoplinepayments.com/api/v1/trade/sessions/create');
+});
+test('缺少設定、停用收款、來源、速率、內容大小限制',async()=>{
+  const env=await setup();
+  assert.equal((await worker.fetch(post('/v1/orders',{}, {Origin:'https://evil.example'}),env)).status,403);
+  assert.equal((await worker.fetch(post('/v1/orders',{}, {'Content-Type':'text/plain'}),env)).status,415);
+  assert.equal((await worker.fetch(post('/v1/orders',{email:'a'.repeat(17000)}),env)).status,413);
+  for(let i=0;i<10;i++)await worker.fetch(post('/v1/licenses/activate',{}),env);
+  assert.equal((await worker.fetch(post('/v1/licenses/activate',{}),env)).status,429);
+  env.CHECKOUT_ENABLED='false';assert.equal((await worker.fetch(post('/v1/orders',{}),env)).status,503);
+  env.DATA_KEY='';assert.equal((await worker.fetch(req('/v1/config'),env)).status,503);
+  const env2=await setup();env2.SHOPLINE_SIGN_KEY='';assert.equal((await worker.fetch(req('/v1/config'),env2)).status,503);
+});
+test('資料庫失敗不確認通知；只清理未付款過期訂單',async()=>{
+  const env=await setup(),o=await order(env);
+  env.DB.raw.prepare('UPDATE orders SET created_at=0').run();await worker.scheduled(null,env);
+  assert.equal(env.DB.raw.prepare('SELECT count(*) AS n FROM orders').get().n,0);
+  const paid=await order(env);await webhook(env,paid);env.DB.raw.prepare('UPDATE orders SET created_at=0').run();await worker.scheduled(null,env);
+  assert.equal(env.DB.raw.prepare('SELECT count(*) AS n FROM orders').get().n,1);
+  env.DB={prepare(){throw new Error('database down');}};assert.equal((await webhook(env,paid)).status,503);
+});
+test('Webhook 沒到時：App 查詢待付款訂單會向 SHOPLINE 補查並入帳',async()=>{
+  const env=await setup(),o=await order(env,{method:'Credit'});
+  await worker.fetch(new Request(o.checkoutURL),env); // 建立 session
+  assert.deepEqual(await (await status(env,o)).json(),{status:'pending'}); // session 尚未成功
+  sessionReply=body=>({sessionId:body.sessionId,status:'SUCCEEDED',paymentDetails:[{paymentMethod:'CreditCard',tradeOrderId:'T'+o.orderId,paymentStatus:'SUCCEEDED'}]});
+  tradeReply=t=>trade(o,{tradeOrderId:t.tradeOrderId});
+  const result=await (await status(env,o)).json();
+  assert.equal(result.status,'paid');assert.ok(result.licenseToken);
+  // 金額不符時不入帳。
+  const other=await order(env,{method:'Credit'});await worker.fetch(new Request(other.checkoutURL),env);
+  tradeReply=t=>trade(other,{tradeOrderId:t.tradeOrderId,payment:{paidAmount:{value:1,currency:'TWD'}}});
+  sessionReply=body=>({sessionId:body.sessionId,status:'SUCCEEDED',paymentDetails:[{tradeOrderId:'T'+other.orderId,paymentStatus:'SUCCEEDED'}]});
+  assert.deepEqual(await (await status(env,other)).json(),{status:'pending'});
+  sessionReply=null;
+});
+
+const DEVICE_A='A'.repeat(24), DEVICE_B='B'.repeat(24), DEVICE_C='C'.repeat(24);
+const activate=(env,o,result,device,takeover=false)=>worker.fetch(post('/v1/licenses/activate',{email:o.email,serial:result.serial,deviceId:device,takeover}),env);
+async function paidOrder(env) {
+  const o=await order(env);await webhook(env,o);
+  const result=await (await worker.fetch(req('/v1/orders/'+o.orderId,{headers:{Authorization:'Bearer '+o.accessToken,'X-Device-Id':DEVICE_A}}),env)).json();
+  return {o,result};
+}
+test('付款後寄一封序號信，重送通知不會重複寄',async()=>{
+  const env=await setup(),o=await order(env);
+  await webhook(env,o);await webhook(env,o);await webhook(env,o);
+  assert.equal(env.EMAIL.sent.length,1);
+  const mail=env.EMAIL.sent[0],{serial}=await (await status(env,o)).json();
+  assert.equal(mail.to,'buyer@example.com');assert.match(mail.text,new RegExp(serial));assert.match(mail.html,new RegExp(serial));
+  assert.ok(env.DB.raw.prepare('SELECT email_sent_at FROM orders').get().email_sent_at);
+});
+test('寄信失敗不影響授權；排程會補寄一次',async()=>{
+  const env=await setup(),o=await order(env);
+  env.EMAIL.send=async()=>{throw Object.assign(new Error('down'),{code:'E_DELIVERY_FAILED'});};
+  await webhook(env,o);
+  assert.equal((await (await status(env,o)).json()).status,'paid');
+  assert.equal(env.DB.raw.prepare('SELECT email_sent_at FROM orders').get().email_sent_at,null);
+  const sent=[];env.EMAIL.send=async m=>{sent.push(m);return {messageId:'x'};};
+  await worker.scheduled(null,env);await worker.scheduled(null,env);
+  assert.equal(sent.length,1);
+});
+test('一台有效裝置：新裝置搶先啟用後，舊裝置的背景檢查失效',async()=>{
+  const env=await setup(),{o,result}=await paidOrder(env);
+  assert.equal((await activate(env,o,result,DEVICE_A)).status,200); // 付款的裝置
+  const blocked=await activate(env,o,result,DEVICE_B);assert.equal(blocked.status,409);assert.equal((await blocked.json()).error,'device_replaced');
+  assert.equal((await activate(env,o,result,DEVICE_B,true)).status,200); // 使用者明確在新裝置啟用
+  assert.equal((await activate(env,o,result,DEVICE_B)).status,200);
+  const old=await activate(env,o,result,DEVICE_A);assert.equal(old.status,409);assert.equal((await old.json()).error,'device_replaced');
+});
+test('24 小時內只能換一次機；滿 24 小時後可再換',async()=>{
+  const env=await setup(),{o,result}=await paidOrder(env);
+  assert.equal((await activate(env,o,result,DEVICE_B,true)).status,200);
+  const limited=await activate(env,o,result,DEVICE_C,true);assert.equal(limited.status,429);assert.equal((await limited.json()).error,'device_change_limited');
+  assert.equal((await activate(env,o,result,DEVICE_B)).status,200); // 目前裝置仍可用
+  env.DB.raw.prepare('UPDATE orders SET device_changed_at=device_changed_at-90000').run();
+  assert.equal((await activate(env,o,result,DEVICE_C,true)).status,200);
+});
+test('裝置識別格式錯誤與舊版 App 的處理',async()=>{
+  const env=await setup(),{o,result}=await paidOrder(env);
+  assert.equal((await worker.fetch(post('/v1/licenses/activate',{email:o.email,serial:result.serial}),env)).status,200); // 舊版：過渡期通過
+  assert.equal((await worker.fetch(post('/v1/licenses/activate',{email:o.email,serial:result.serial,deviceId:'short'}),env)).status,200);
+  env.REQUIRE_DEVICE='true';
+  assert.equal((await worker.fetch(post('/v1/licenses/activate',{email:o.email,serial:result.serial}),env)).status,426);
+  assert.equal((await activate(env,o,result,DEVICE_A)).status,200);
+});
+test('依 App 語言寄中文或英文序號信，並帶入 SHOPLINE 付款頁語言',async()=>{
+  calls.length=0;
+  const env=await setup(),zh=await order(env),en=await order(env,{language:'en'});
+  await worker.fetch(new Request(zh.checkoutURL),env);await worker.fetch(new Request(en.checkoutURL),env);
+  assert.equal(calls[0].body.language,'zh-TW');assert.equal(calls[1].body.language,'en');
+  await webhook(env,zh);await webhook(env,en);
+  const [zhMail,enMail]=env.EMAIL.sent;
+  assert.equal(zhMail.subject,'你的 Idea Memo Pro 序號');assert.match(zhMail.html,/感謝你的購買/);assert.match(zhMail.text,/換電腦時怎麼做/);
+  assert.equal(enMail.subject,'Your Idea Memo Pro serial number');assert.match(enMail.html,/Thank you for your purchase/);assert.match(enMail.text,/Switching to a new Mac/);
+  assert.doesNotMatch(enMail.html,/感謝|序號/);
+  assert.match(enMail.html,/https:\/\/pay\.jimmy-tools\.com\/assets\/ideamemo-icon\.png/);
+  const odd=await order(env,{language:'fr'});assert.equal(env.DB.raw.prepare('SELECT language FROM orders WHERE id=?').get(odd.orderId).language,'zh-Hant');
+});
+test('價格必須明確設定：PRICE_TWD 缺少或不合理時，Worker 視為未設定',async()=>{
+  for(const bad of [undefined,'','0','-5','12.5','abc','1000000']) {
+    const env=await setup();
+    if(bad===undefined) delete env.PRICE_TWD; else env.PRICE_TWD=bad;
+    const r=await worker.fetch(req('/v1/config'),env);
+    assert.equal(r.status,503,String(bad));
+    assert.equal((await r.json()).error,'not_configured');
+  }
+});
+test('價格由伺服器變數決定，/v1/config 與訂單金額一致，前端無法指定',async()=>{
+  const env=await setup();env.PRICE_TWD='250';
+  const config=await (await worker.fetch(req('/v1/config'),env)).json();
+  assert.equal(config.amount,250);
+  const o=await order(env,{amount:1});
+  assert.equal(o.amount,250);
+  assert.equal(env.DB.raw.prepare('SELECT amount FROM orders').get().amount,250);
+});

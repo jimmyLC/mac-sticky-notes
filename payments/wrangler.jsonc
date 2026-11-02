@@ -1,0 +1,40 @@
+{
+  // Idea Memo Pro payments. Nothing here is deployed yet; see ../docs/PRO_LICENSING.md.
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "ideamemo-payments-staging",
+  "main": "src/worker.mjs",
+  "compatibility_date": "2026-10-01",
+  "workers_dev": false,
+  "observability": { "enabled": false },
+  "vars": {
+    "PAYMENT_ENV": "staging",
+    "CHECKOUT_ENABLED": "false",
+    "APPLE_PAY_ENABLED": "true",
+    // Whole NT$ price. Must be set (1-100000) before the Worker will serve anything but /health.
+    "PRICE_TWD": "",
+    "PUBLIC_BASE_URL": "https://ideamemo-payments-staging.jimmy-tools.com",
+    "CALLBACK_BASE_URL": "https://ideamemo-payments-staging.jimmy-tools.com"
+  },
+  "routes": [{ "pattern": "ideamemo-payments-staging.jimmy-tools.com", "custom_domain": true }],
+  "d1_databases": [{ "binding": "DB", "database_name": "ideamemo-payments-staging", "database_id": "REPLACE_WITH_ID_FROM_wrangler_d1_create", "migrations_dir": "migrations" }],
+  "send_email": [{ "name": "EMAIL" }],
+  "triggers": { "crons": ["17 20 * * *"] },
+  "env": {
+    "production": {
+      "name": "ideamemo-payments",
+      "workers_dev": false,
+      "vars": {
+        "PAYMENT_ENV": "production",
+        "CHECKOUT_ENABLED": "false",
+        "APPLE_PAY_ENABLED": "true",
+        "PRICE_TWD": "",
+        "PUBLIC_BASE_URL": "https://ideamemo-payments.jimmy-tools.com",
+        "CALLBACK_BASE_URL": "https://ideamemo-payments.jimmy-tools.com"
+      },
+      "routes": [{ "pattern": "ideamemo-payments.jimmy-tools.com", "custom_domain": true }],
+      "d1_databases": [{ "binding": "DB", "database_name": "ideamemo-payments", "database_id": "REPLACE_WITH_ID_FROM_wrangler_d1_create", "migrations_dir": "migrations" }],
+      "send_email": [{ "name": "EMAIL" }],
+      "triggers": { "crons": ["17 20 * * *"] }
+    }
+  }
+}

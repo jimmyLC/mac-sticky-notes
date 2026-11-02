@@ -1,5 +1,6 @@
 import AppKit
 import Carbon.HIToolbox
+import Combine
 import ServiceManagement
 import StickyCore
 import SwiftUI
@@ -81,16 +82,16 @@ enum AppAppearance: String, CaseIterable, Identifiable {
     }
 }
 
+extension Notification.Name {
+    /// Posted when something wants the Settings window (with the Pro section) in front.
+    static let showProSettings = Notification.Name("IdeaMemoShowProSettings")
+}
+
 enum Upgrade {
-    /// Purchasing is not built yet; this tells the user so instead of doing nothing.
+    /// Opens Settings, where Pro can be bought or restored.
     @MainActor
     static func present() {
-        let alert = NSAlert()
-        alert.messageText = L("Pro is coming soon")
-        alert.informativeText = L("Unlimited memos will be available with Pro. Purchasing is not open yet.")
-        alert.addButton(withTitle: L("OK"))
-        NSApp.activate(ignoringOtherApps: true)
-        alert.runModal()
+        NotificationCenter.default.post(name: .showProSettings, object: nil)
     }
 }
 
@@ -128,10 +129,10 @@ final class AppSettings: ObservableObject {
         }
     }
 
-    /// Pro is a placeholder switch until purchasing is built; `--pro` unlocks it for testing.
-    @Published var isPro: Bool {
-        didSet { defaults.set(isPro, forKey: "isPro") }
-    }
+    /// Pro comes only from a verified receipt held by the license store, never from a setting.
+    let license: ProLicenseStore
+    @Published private(set) var isPro = false
+    private var licenseObservation: AnyCancellable?
 
     var plan: Plan { isPro ? .pro : .free }
 
@@ -150,9 +151,11 @@ final class AppSettings: ObservableObject {
         textSize = TextSize(rawValue: defaults.integer(forKey: "textSize")) ?? .medium
         showInDock = defaults.object(forKey: "showInDock") as? Bool ?? true
         appearance = AppAppearance(rawValue: defaults.string(forKey: "appearance") ?? "") ?? .system
-        isPro = defaults.bool(forKey: "isPro") || CommandLine.arguments.contains("--pro")
         hotkey = defaults.data(forKey: "hotkey")
             .flatMap { try? JSONDecoder().decode(HotkeyChord.self, from: $0) } ?? .default
+        license = ProLicenseStore()
+        isPro = license.isPro
+        licenseObservation = license.$isPro.sink { [weak self] in self?.isPro = $0 }
     }
 }
 

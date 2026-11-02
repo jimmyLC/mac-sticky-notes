@@ -310,7 +310,7 @@ final class NoteManager: NSObject, ObservableObject, NSWindowDelegate {
             Plan.freeMemoLimit
         )
         alert.addButton(withTitle: L("OK"))
-        alert.addButton(withTitle: L("Upgrade to Pro…"))
+        alert.addButton(withTitle: L("Get Pro…"))
         NSApp.activate(ignoringOtherApps: true)
         if alert.runModal() == .alertSecondButtonReturn { Upgrade.present() }
     }

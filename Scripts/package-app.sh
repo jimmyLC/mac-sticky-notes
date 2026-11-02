@@ -19,6 +19,9 @@ mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp "$BIN" "$APP/Contents/MacOS/IdeaMemo"
 cp -R Sources/IdeaMemo/Localization/*.lproj "$APP/Contents/Resources/"
 
+# Pro purchase configuration (enabled:false until the payment service is deployed)
+cp Config/ProConfiguration.json "$APP/Contents/Resources/ProConfiguration.json"
+
 # App icon: Design/AppIcon.png (1024px) -> AppIcon.icns
 ICONSET="$ROOT/build/AppIcon.iconset"
 rm -rf "$ICONSET"

@@ -17,7 +17,8 @@ desktop, come in several colours, and are easy to manage. Built with Swift (Swif
 - **Transparency** — per-memo slider (hover toolbar ▸ colour dot) for the background; text stays solid.
 - **Light / dark** — Settings ▸ Appearance: System, Light or Dark. In dark mode pastel memos become deep tones with light text.
 - **Free and Pro** — Free holds 10 memos, Pro is unlimited. A FREE 3/10 / PRO tag shows in the manager and Settings.
-  Purchasing is not built yet (the upgrade button says so); `--pro` unlocks Pro for testing.
+  Pro is a lifetime serial bought on the web (SHOPLINE Payments, same model as MacMP4: serial email, one Mac at a time).
+  Built and tested but not deployed yet, so purchasing is switched off; see [docs/PRO_LICENSING.md](docs/PRO_LICENSING.md).
 - **Manager window** — card grid with full-text search, colour filter, sorting, multi-select,
   and a trash (kept 30 days).
 - **Dock and menu bar** — shows in the Dock by default; turn "Show in Dock" off in Settings to keep it in the menu bar only. Global shortcut for a new note (default ⌃⌥N, changeable).
@@ -48,6 +49,7 @@ Pass `SIGN_ID="Apple Development: …"` to sign with a real identity.
 | `Sources/IdeaMemo` | The app: windows, editor, manager, settings, menu bar |
 | `Tests/StickyCoreTests` | Unit tests for the core |
 | `Design/` | App icon: `AppIcon-source.webp` is the artwork; `Scripts/make-icon.swift` turns it into the transparent 1024px `AppIcon.png` |
+| `payments/` | Pro payment Worker (Cloudflare Worker + D1) and its Node tests |
 | `Scripts/package-app.sh` | Builds the `.app` bundle with Info.plist and sandbox entitlements |
 
 The app runs in the App Sandbox from the start, so it can later go to the Mac App Store.

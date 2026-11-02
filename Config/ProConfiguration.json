@@ -1,0 +1,6 @@
+{
+  "enabled": false,
+  "apiBaseURL": "https://ideamemo-payments.jimmy-tools.com",
+  "environment": "production",
+  "publicKey": ""
+}

@@ -5,7 +5,13 @@ import SwiftUI
 /// The management window: browse, search, filter, tidy up and recover notes.
 struct ManagerView: View {
     @ObservedObject var manager: NoteManager
+    @ObservedObject private var settings: AppSettings
     @Environment(\.colorScheme) private var colorScheme
+
+    init(manager: NoteManager) {
+        self.manager = manager
+        self.settings = manager.settings
+    }
 
     private enum Tab: Hashable { case notes, trash }
 
@@ -108,7 +114,7 @@ struct ManagerView: View {
 
     /// FREE 3/10 or PRO.
     private var planTag: some View {
-        let plan = manager.settings.plan
+        let plan = settings.plan
         return Text(plan.tagText(currentCount: manager.activeNotes.count))
             .font(.caption.weight(.bold))
             .foregroundStyle(plan == .pro ? Color.orange : Color.secondary)

@@ -1,0 +1,29 @@
+// 建立專屬授權金鑰，不輸出機密；不連線、不部署、不收款。
+import {readFile,writeFile,chmod} from 'node:fs/promises';
+import {randomToken,unbase64url} from '../src/crypto.mjs';
+const [environment,apiURL,priceArg]=process.argv.slice(2), callbackURL=apiURL;
+const price=Number(priceArg);
+if(!['staging','production'].includes(environment)||!apiURL||!Number.isInteger(price)||price<1||price>100000)throw new Error('用法：node scripts/prepare-config.mjs staging|production https://API主機 價格(整數 NT$)');
+for(const value of [apiURL,callbackURL]) {
+  const u=new URL(value);if(u.protocol!=='https:'||u.pathname!=='/'||u.search||u.hash||u.username||u.password||u.port)throw new Error('必須使用 HTTPS 主機網址');
+}
+const path=new URL(environment==='production'?'../.dev.vars.production':'../.dev.vars',import.meta.url);
+let values={};
+try {
+  const source=await readFile(path,'utf8');
+  for(const line of source.split('\n')){const i=line.indexOf('=');if(i>0)values[line.slice(0,i)]=line.slice(i+1);}
+} catch(e){if(e.code!=='ENOENT')throw e;}
+if(!values.LICENSE_SIGNING_JWK){
+  const pair=await crypto.subtle.generateKey({name:'ECDSA',namedCurve:'P-256'},true,['sign','verify']);
+  values.LICENSE_SIGNING_JWK=JSON.stringify(await crypto.subtle.exportKey('jwk',pair.privateKey));
+}
+values.DATA_KEY ||= randomToken();values.LOOKUP_KEY ||= randomToken();
+Object.assign(values,{PAYMENT_ENV:environment,PRICE_TWD:String(price),PUBLIC_BASE_URL:apiURL,CALLBACK_BASE_URL:callbackURL,CHECKOUT_ENABLED:'false',APPLE_PAY_ENABLED:'true'});
+await writeFile(path,Object.entries(values).map(([k,v])=>`${k}=${v}`).join('\n')+'\n',{mode:0o600});await chmod(path,0o600);
+const jwk=JSON.parse(values.LICENSE_SIGNING_JWK);
+const publicRaw=Buffer.concat([Buffer.from([4]),Buffer.from(unbase64url(jwk.x)),Buffer.from(unbase64url(jwk.y))]);
+const publicConfig={enabled:false,apiBaseURL:apiURL,environment,publicKey:publicRaw.toString('base64')};
+const output=new URL(`../ProConfiguration.${environment}.public.json`,import.meta.url);
+await writeFile(output,JSON.stringify(publicConfig,null,2)+'\n');
+for(const key of ['SHOPLINE_MERCHANT_ID','SHOPLINE_API_KEY','SHOPLINE_SIGN_KEY'])if(!values[key])console.log(`尚缺 ${key}：請自行填入 ${path.pathname}（不要貼到聊天或 git）。`);
+console.log(`已準備 ${environment} 本機私密設定（600）及對應的公開設定。收款維持關閉；未部署。`);

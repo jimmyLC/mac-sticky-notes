@@ -29,6 +29,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         manager.start()
         registerHotkey()
         runExportHookIfRequested()
+        runKeychainSelfTestIfRequested()
 
         settings.$hotkey
             .dropFirst()
@@ -38,6 +39,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         settings.$showInDock
             .dropFirst()
             .sink { [weak self] _ in DispatchQueue.main.async { self?.applyDockPolicy(reactivate: true) } }
+            .store(in: &cancellables)
+
+        Task { await settings.license.resume() }
+        NotificationCenter.default.publisher(for: .showProSettings)
+            .sink { [weak self] _ in self?.openSettings() }
             .store(in: &cancellables)
 
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { [weak self] in self?.askAboutLaunchAtLoginOnce() }
@@ -98,6 +104,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             NSLog("IdeaMemo export: wrote %d notes to %@", count, folder.path)
         } catch {
             NSLog("IdeaMemo export failed: %@", String(describing: error))
+        }
+    }
+
+    /// Developer hook: `--keychain-selftest` writes, reads and deletes a throw-away Keychain item
+    /// from inside the sandbox, so the license storage path can be checked without a purchase.
+    private func runKeychainSelfTestIfRequested() {
+        guard CommandLine.arguments.contains("--keychain-selftest") else { return }
+        func report(_ text: String) {
+            let folder = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+            try? ("keychain selftest: " + text + "\n").write(to: folder.appendingPathComponent("selftest.txt"), atomically: true, encoding: .utf8)
+        }
+        let vault = KeychainLicenseVault(environment: "selftest")
+        do {
+            try vault.write(Data("hello".utf8))
+            let back = try vault.read()
+            try vault.clear()
+            let gone = try vault.read()
+            report("read back \(back == Data("hello".utf8) ? "OK" : "MISMATCH"), cleared \(gone == nil ? "OK" : "STILL THERE")")
+        } catch {
+            report("failed: \(error)")
         }
     }
 
@@ -178,9 +204,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             )
             window.title = L("Settings")
             window.isReleasedWhenClosed = false
-            let host = NSHostingView(rootView: SettingsView(settings: settings, manager: manager))
-            window.contentView = host
-            window.setContentSize(host.fittingSize)
+            let controller = NSHostingController(rootView: SettingsView(settings: settings, manager: manager))
+            window.contentViewController = controller
             window.center()
             settingsWindow = window
         }

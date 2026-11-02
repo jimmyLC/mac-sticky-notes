@@ -5,3 +5,7 @@ DerivedData/
 build/
 *.app
 .DS_Store
+.dev.vars
+.dev.vars.*
+payments/node_modules/
+payments/ProConfiguration.*.public.json
