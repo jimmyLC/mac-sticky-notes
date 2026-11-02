@@ -52,7 +52,14 @@ struct NoteView: View {
             }
         }
         .overlay(alignment: .topTrailing) {
-            if hovering { toolbar(for: note).padding(.top, 3).padding(.trailing, 6) }
+            if hovering || showColors {
+                VStack(alignment: .trailing, spacing: 6) {
+                    toolbar(for: note)
+                    if showColors { colorPicker(for: note) }
+                }
+                .padding(.top, 3)
+                .padding(.trailing, 6)
+            }
         }
         .onHover { hovering = $0 }
         .contextMenu { contextMenu(for: note) }
@@ -74,7 +81,6 @@ struct NoteView: View {
             }
             .buttonStyle(.plain)
             .help(L("Change Color"))
-            .popover(isPresented: $showColors, arrowEdge: .bottom) { colorPicker(for: note) }
 
             toolbarButton(note.alwaysOnTop ? "pin.fill" : "pin", help: L("Keep on Top")) { manager.togglePin(noteID) }
             toolbarButton("trash", help: L("Delete Note")) { manager.moveToTrash(noteID) }
@@ -101,6 +107,7 @@ struct NoteView: View {
             ForEach(NoteColor.presets, id: \.self) { color in
                 Button {
                     manager.setColor(noteID, color)
+                    showColors = false
                 } label: {
                     Circle()
                         .fill(color.swiftUIColor)
@@ -131,7 +138,9 @@ struct NoteView: View {
             .buttonStyle(.plain)
             .help(L("Custom Color…"))
         }
-        .padding(12)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 7)
+        .background(.ultraThinMaterial, in: Capsule())
     }
 
     @ViewBuilder
